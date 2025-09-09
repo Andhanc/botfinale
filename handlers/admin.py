@@ -5,7 +5,14 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from database.models import Algorithm, AlgorithmData, AsicModel, Coin, Manufacturer
+from database.models import (
+    Algorithm,
+    AlgorithmData,
+    AsicModel,
+    AsicModelLine,
+    Coin,
+    Manufacturer,
+)
 from database.request import CalculatorReq, CoinReq
 from keyboards.admin_kb import AdminKB
 from signature import Settings
@@ -17,13 +24,16 @@ class AdminStates(StatesGroup):
     broadcast_text = State()
     broadcast_photo = State()
     reply_to_user = State()
-    add_asic_name = State()
+
+    # Новые состояния для трехуровневой системы
     add_asic_manufacturer = State()
-    add_asic_algorithm = State()
+    add_asic_line_name = State()
+    add_asic_line_algorithm = State()
+    add_asic_model_name = State()
     add_asic_hashrate = State()
     add_asic_power = State()
-    add_asic_price = State()
     add_asic_get_coin = State()
+
     edit_coin_price = State()
     algo_default_coin = State()
     algo_difficulty = State()
@@ -61,18 +71,22 @@ class Admin:
 
         self.dp.callback_query(F.data == "manage_asic")(self.manage_asic)
         self.dp.callback_query(F.data == "add_asic")(self.add_asic_start)
-        self.dp.callback_query(F.data.startswith("manufacturer:"))(
+
+        # Новые обработчики для трехуровневой системы
+        self.dp.callback_query(F.data.startswith("add_manufacturer:"))(
             self.handle_manufacturer_selection
         )
-        self.dp.callback_query(F.data.startswith("algorithm:"))(
+        self.dp.callback_query(F.data.startswith("add_algorithm:"))(
             self.handle_algorithm_selection
         )
-        self.dp.message(AdminStates.add_asic_name)(self.add_asic_name)
+        self.dp.message(AdminStates.add_asic_line_name)(self.add_asic_line_name)
+        self.dp.message(AdminStates.add_asic_model_name)(self.add_asic_model_name)
         self.dp.message(AdminStates.add_asic_hashrate)(self.add_asic_hashrate)
         self.dp.message(AdminStates.add_asic_power)(self.add_asic_power)
-        self.dp.message(AdminStates.add_asic_price)(self.add_asic_price)
         self.dp.message(AdminStates.add_asic_get_coin)(self.add_asic_get_coin)
+
         self.dp.callback_query(F.data.startswith("delete_asic:"))(self.delete_asic)
+        self.dp.callback_query(F.data.startswith("delete_line:"))(self.delete_line)
 
         self.dp.callback_query(F.data == "manage_coins")(self.manage_coins)
         self.dp.callback_query(F.data.startswith("edit_coin:"))(self.edit_coin_start)
@@ -176,36 +190,61 @@ class Admin:
         await self.admin_menu(call)
 
     async def manage_asic(self, call: types.CallbackQuery):
-        models = await self.calc_req.get_all_asic_models()
-        kb = await AdminKB.list_asic(models)
+        model_lines = await self.calc_req.get_model_lines_by_manufacturer(
+            Manufacturer.BITMAIN
+        )
+        kb = await AdminKB.list_asic_lines(model_lines)
         await call.message.edit_text("⚙️ Управление ASIC:", reply_markup=kb)
 
     async def add_asic_start(self, call: types.CallbackQuery, state: FSMContext):
-        await call.message.edit_text("🏷️ Введите название ASIC:")
-        await state.set_state(AdminStates.add_asic_name)
-
-    async def add_asic_name(self, message: types.Message, state: FSMContext):
-        await state.update_data(name=message.text)
-        await message.answer(
+        await call.message.edit_text(
             "🏭 Выберите производителя:",
-            reply_markup=await AdminKB.choose_manufacturer(),
+            reply_markup=await AdminKB.choose_manufacturer_add(),
         )
+        await state.set_state(AdminStates.add_asic_manufacturer)
 
     async def handle_manufacturer_selection(
         self, call: types.CallbackQuery, state: FSMContext
     ):
-        manufacturer = call.data.split(":")[1]
+        manufacturer_name = call.data.split(":")[1]
+        # Сохраняем объект enum, а не строку
+        manufacturer = Manufacturer[manufacturer_name]
         await state.update_data(manufacturer=manufacturer)
         await call.message.edit_text(
-            "⚙️ Выберите алгоритм:", reply_markup=await AdminKB.choose_algorithm()
+            "🏷️ Введите название модельной линейки (например, S19, M50):"
         )
+        await state.set_state(AdminStates.add_asic_line_name)
+
+    async def add_asic_line_name(self, message: types.Message, state: FSMContext):
+        await state.update_data(line_name=message.text)
+        await message.answer(
+            "⚙️ Выберите алгоритм:", reply_markup=await AdminKB.choose_algorithm_add()
+        )
+        await state.set_state(AdminStates.add_asic_line_algorithm)
 
     async def handle_algorithm_selection(
         self, call: types.CallbackQuery, state: FSMContext
     ):
-        algorithm = call.data.split(":")[1]
-        await state.update_data(algorithm=algorithm)
-        await call.message.edit_text("⚡ Введите хэшрейт (TH/s или GH/s):")
+        algorithm_name = call.data.split(":")[1]
+        data = await state.get_data()
+        manufacturer = data["manufacturer"]  # Теперь это объект Manufacturer
+
+        # Создаем модельную линейку
+        line_id = await self.calc_req.add_model_line(
+            name=data["line_name"],
+            manufacturer=manufacturer,  # Передаем объект Manufacturer
+            algorithm=Algorithm[algorithm_name],  # Создаем объект Algorithm
+        )
+
+        await state.update_data(model_line_id=line_id, algorithm=algorithm_name)
+        await call.message.edit_text(
+            "🔧 Введите название конкретной модели (например, S19 Pro 110TH):"
+        )
+        await state.set_state(AdminStates.add_asic_model_name)
+
+    async def add_asic_model_name(self, message: types.Message, state: FSMContext):
+        await state.update_data(model_name=message.text)
+        await message.answer("⚡ Введите хэшрейт (TH/s или GH/s):")
         await state.set_state(AdminStates.add_asic_hashrate)
 
     async def add_asic_hashrate(self, message: types.Message, state: FSMContext):
@@ -221,17 +260,8 @@ class Admin:
         try:
             power = float(message.text.replace(",", "."))
             await state.update_data(power=power)
-            await message.answer("💰 Введите цену в USD:")
-            await state.set_state(AdminStates.add_asic_price)
-        except ValueError:
-            await message.answer("❌ Введите число")
-
-    async def add_asic_price(self, message: types.Message, state: FSMContext):
-        try:
-            price = float(message.text.replace(",", "."))
-            await state.update_data(price_usd=price)
             await message.answer(
-                "💰 Введите добываемые монеты (через пробел, например: BTC ETH):"
+                "💰 Введите добываемые монеты (через запятую, например, BTC,ETH):"
             )
             await state.set_state(AdminStates.add_asic_get_coin)
         except ValueError:
@@ -241,16 +271,26 @@ class Admin:
         try:
             get_coin = message.text.upper()
             data = await state.get_data()
+
+            # Создаем конкретную модель
             await self.calc_req.add_asic_model(
-                name=data["name"],
-                manufacturer=Manufacturer[data["manufacturer"]],
-                algorithm=Algorithm[data["algorithm"]],
+                name=data["model_name"],
+                model_line_id=data["model_line_id"],
                 hash_rate=data["hash_rate"],
                 power_consumption=data["power"],
-                price_usd=data["price_usd"],
                 get_coin=get_coin,
             )
-            await message.answer("✅ ASIC добавлен с информацией о добываемых монетах")
+
+            manufacturer = Manufacturer(data["manufacturer"])
+            await message.answer(
+                f"✅ ASIC добавлен!\n"
+                f"🏭 Производитель: {manufacturer.value}\n"
+                f"📦 Линейка: {data['line_name']}\n"
+                f"🔧 Модель: {data['model_name']}\n"
+                f"⚡ Хешрейт: {data['hash_rate']} TH/s\n"
+                f"🔌 Потребление: {data['power']}W\n"
+                f"💰 Монеты: {get_coin}"
+            )
             await state.clear()
             await self.admin_menu(message)
         except Exception as e:
@@ -260,6 +300,12 @@ class Admin:
         model_id = int(call.data.split(":")[1])
         await self.calc_req.delete_asic_model(model_id)
         await call.answer("✅ ASIC удалён")
+        await self.manage_asic(call)
+
+    async def delete_line(self, call: types.CallbackQuery):
+        line_id = int(call.data.split(":")[1])
+        await self.calc_req.delete_model_line(line_id)
+        await call.answer("✅ Линейка удалена")
         await self.manage_asic(call)
 
     async def manage_coins(self, call: types.CallbackQuery):
@@ -343,7 +389,7 @@ class Admin:
         if self.is_admin(message.from_user.id):
             return
 
-        for admin_id in ADMIN_IDS.split(","):
+        for admin_id in ADMIN_IDS:
             try:
                 await self.bot.forward_message(
                     admin_id, message.chat.id, message.message_id

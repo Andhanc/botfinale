@@ -34,9 +34,6 @@ class Algorithm(str, Enum):
     KHEAVYHASH = "kHeavyHash"
     BLAKE2S = "Blake2S"
     BLAKE2B_SHA3 = "Blake2B+SHA3"
-    EAGLESONG = "Eaglesong"
-    CUCKAROO = "Cuckaroo"
-    CUCKATOO = "Cuckatoo"
 
 
 class Manufacturer(str, Enum):
@@ -45,10 +42,6 @@ class Manufacturer(str, Enum):
     ICERIVER = "Ice River"
     GOLDSHELL = "Goldshell"
     IPOLLO = "iPollo"
-    JASMINER = "JASMINER"
-    ELPHAPEX = "Elphapex"
-    BOMBAX = "Bombax"
-    AVALON = "Avalon"
     OTHER = "Другой"
 
 
@@ -80,18 +73,29 @@ class Coin(Base):
     last_updated = Column(DateTime, default=datetime.now())
 
 
+class AsicModelLine(Base):
+    __tablename__ = "asic_model_lines"
+
+    name = Column(String(100), nullable=False)  # Например: "S19", "M50", "T21"
+    manufacturer = Column(SQLEnum(Manufacturer), nullable=False)
+    algorithm = Column(SQLEnum(Algorithm), nullable=False)
+
+    # Связь с конкретными модификациями
+    models = relationship("AsicModel", back_populates="model_line")
+
+
 class AsicModel(Base):
     __tablename__ = "asic_models"
 
-    name = Column(String(100), nullable=False)
-    manufacturer = Column(SQLEnum(Manufacturer), nullable=False)
-    algorithm = Column(SQLEnum(Algorithm), nullable=False)
+    name = Column(String(100), nullable=False)  # Например: "S19 Pro", "S19j Pro 110TH"
+    model_line_id = Column(Integer, ForeignKey("asic_model_lines.id"))
     hash_rate = Column(Float, nullable=False)
     power_consumption = Column(Float, nullable=False)
-    price_usd = Column(Float, default=0.0)
     get_coin = Column(String(), default="")
     is_active = Column(Boolean, default=True)
 
+    # Связи
+    model_line = relationship("AsicModelLine", back_populates="models")
     sell_requests = relationship("SellRequest", back_populates="device")
 
 
@@ -183,65 +187,58 @@ class CreateDatabase:
                 if not await session.scalar(select(AlgorithmData)):
                     session.add_all(
                         [
+                            # Bitcoin (SHA256) - ИСПРАВЛЕНО
                             AlgorithmData(
                                 algorithm=Algorithm.SHA256,
                                 default_coin="BTC",
-                                difficulty=1e13,
-                                network_hashrate=200_000_000,
-                                block_reward=6.25,
+                                difficulty=85_000_000_000_000_000,  # 85e15 (реалистично)
+                                network_hashrate=650_000_000,  # 200 EH/s
+                                block_reward=3.125,  # После халвинга 2024
                             ),
+                            # Kaspa (KHEAVYHASH) - ОБНОВЛЕНО
                             AlgorithmData(
                                 algorithm=Algorithm.KHEAVYHASH,
                                 default_coin="KAS",
-                                difficulty=1.5e9,
-                                network_hashrate=300,
-                                block_reward=200,
+                                difficulty=150_000_000_000,  # 150e9 (более реалистично)
+                                network_hashrate=300_000,  # 300 PH/s
+                                block_reward=100,  # Обновленная награда
                             ),
+                            # Ethereum Classic (ETCHASH) - ОБНОВЛЕНО
                             AlgorithmData(
                                 algorithm=Algorithm.ETCHASH,
-                                default_coin="ETC",
-                                difficulty=5e11,
-                                network_hashrate=50_000,
+                                default_coin="ETH",
+                                difficulty=50_000_000_000_000,  # 50e12
+                                network_hashrate=50_000_000,  # 50 TH/s
                                 block_reward=2.56,
                             ),
+                            # Litecoin (SCRYPT) - ОБНОВЛЕНО
+                            AlgorithmData(
+                                algorithm=Algorithm.SCRYPT,
+                                default_coin="LTC",
+                                difficulty=15_000_000,  # 15e6
+                                network_hashrate=600_000,  # 600 TH/s
+                                block_reward=6.25,  # Обновленная награда
+                            ),
+                            # Blake2S - ОБНОВЛЕНО
                             AlgorithmData(
                                 algorithm=Algorithm.BLAKE2S,
                                 default_coin="NEOX",
-                                difficulty=1.5e8,
-                                network_hashrate=2_500,
-                                block_reward=4.5,
+                                difficulty=200_000_000,  # 200e6
+                                network_hashrate=3_000,  # 3 TH/s
+                                block_reward=3.5,
                             ),
+                            # Blake2B+SHA3 - ОБНОВЛЕНО
                             AlgorithmData(
                                 algorithm=Algorithm.BLAKE2B_SHA3,
                                 default_coin="KLS",
-                                difficulty=2e9,
-                                network_hashrate=150,
-                                block_reward=15,
-                            ),
-                            AlgorithmData(
-                                algorithm=Algorithm.EAGLESONG,
-                                default_coin="CKB",
-                                difficulty=8e10,
-                                network_hashrate=180_000,
-                                block_reward=1_917,
-                            ),
-                            AlgorithmData(
-                                algorithm=Algorithm.CUCKAROO,
-                                default_coin="GRIN",
-                                difficulty=2e9,
-                                network_hashrate=5,
-                                block_reward=60,
-                            ),
-                            AlgorithmData(
-                                algorithm=Algorithm.CUCKATOO,
-                                default_coin="GRIN",
-                                difficulty=1e10,
-                                network_hashrate=8,
-                                block_reward=60,
+                                difficulty=3_000_000_000,  # 3e9
+                                network_hashrate=200,  # 200 GH/s
+                                block_reward=12,
                             ),
                         ]
                     )
                     await session.commit()
+
                 coins_exist = await session.execute(select(Coin))
                 if not coins_exist.scalars().first():
                     session.add_all(
@@ -249,39 +246,31 @@ class CreateDatabase:
                             Coin(
                                 symbol="BTC",
                                 name="Bitcoin",
-                                coin_gecko_id="bitcoin",  # Добавьте это поле!
+                                coin_gecko_id="bitcoin",
                                 algorithm=Algorithm.SHA256,
                                 current_price_usd=45000.0,
-                                current_price_rub=45000.0 * 90,  # Пример конвертации
+                                current_price_rub=45000.0 * 90,
                             ),
                             Coin(
                                 symbol="KAS",
                                 name="Kaspa",
-                                coin_gecko_id="kaspa",  # Добавьте это поле!
+                                coin_gecko_id="kaspa",
                                 algorithm=Algorithm.KHEAVYHASH,
                                 current_price_usd=0.087,
                                 current_price_rub=0.087 * 90,
                             ),
                             Coin(
-                                symbol="ETC",
-                                name="Ethereum Classic",
-                                coin_gecko_id="ethereum-classic",  # Добавьте это поле!
+                                symbol="ETH",
+                                name="Ethereum",
+                                coin_gecko_id="ethereum-classic",
                                 algorithm=Algorithm.ETCHASH,
                                 current_price_usd=21.67,
                                 current_price_rub=21.67 * 90,
                             ),
                             Coin(
-                                symbol="USDT",
-                                name="Tether",
-                                coin_gecko_id="tether",  # Добавьте это поле!
-                                algorithm=Algorithm.EAGLESONG,  # У USDT нет алгоритма
-                                current_price_usd=1.0,  # USDT ≈ $1
-                                current_price_rub=80.70,  # Ты указал актуальную цену
-                            ),
-                            Coin(
                                 symbol="DOGE",
                                 name="Dogecoin",
-                                coin_gecko_id="dogecoin",  # Добавьте это поле!
+                                coin_gecko_id="dogecoin",
                                 algorithm=Algorithm.SCRYPT,
                                 current_price_usd=0.23,
                                 current_price_rub=0.23 * 90,
@@ -289,7 +278,7 @@ class CreateDatabase:
                             Coin(
                                 symbol="LTC",
                                 name="Litecoin",
-                                coin_gecko_id="litecoin",  # Добавьте это поле!
+                                coin_gecko_id="litecoin",
                                 algorithm=Algorithm.SCRYPT,
                                 current_price_usd=120.02,
                                 current_price_rub=120.02 * 90,

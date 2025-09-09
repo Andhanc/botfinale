@@ -1,7 +1,9 @@
+from asyncio.log import logger
 from typing import Any, Dict
 
 from aiogram import F, types
 from aiogram.enums import ContentType
+from aiogram.enums.parse_mode import ParseMode
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, Filter
 from aiogram.fsm.context import FSMContext
@@ -11,7 +13,9 @@ from database.models import Algorithm, Manufacturer
 from keyboards.calculator_kb import CalculatorKB
 from keyboards.client_kb import ClientKB
 from signature import Settings
-from utils.ai_service import ask_ishushka, create_chat
+from utils.ai_service import ask_ishushka
+from utils.calculator import MiningCalculator
+from utils.coin_service import CoinGeckoService
 from utils.states import BetterPriceState, CalculatorState, FreeAiState, SellForm
 
 user_chats: Dict[int, str] = {}
@@ -40,7 +44,9 @@ class Client:
     async def register_handlers(self):
         self.dp.message(Command("start"))(self.start_handler)
         self.dp.message(Command("sell"))(self.sell_start_handler)
+        self.dp.callback_query(F.data == "sell_device")(self.sell_start_handler_call)
         self.dp.message(Command("by"))(self.by_handler)
+        self.dp.message(Command("faq"))(self.faq_handler)
 
         self.dp.channel_post(ChannelFilter(-1002725954632))(
             self.channel_message_handler
@@ -53,7 +59,7 @@ class Client:
         self.dp.callback_query(F.data == "calc_calc")(self.calc_calc_handler)
         self.dp.callback_query(F.data == "calc_chars")(self.calc_chars_handler)
         self.dp.callback_query(F.data == "calc_coins")(self.calc_coins_handler)
-        self.dp.callback_query(F.data == "notify_toggle")(self.notify_toggle_handler)
+        self.dp.callback_query(F.data == "document")(self.send_file_price)
 
         self.dp.callback_query(F.data == "better_price")(self.better_price_handler)
         self.dp.message(
@@ -78,19 +84,27 @@ class Client:
         self.dp.callback_query(F.data.startswith("calc_manufacturer:"))(
             self.calc_manufacturer_handler
         )
+        self.dp.callback_query(F.data.startswith("calc_line:"))(
+            self.calc_model_line_handler
+        )
         self.dp.callback_query(F.data.startswith("calc_model:"))(
             self.calc_model_handler
+        )
+        self.dp.callback_query(F.data.startswith("calc_lines_page:"))(
+            self.calc_models_page_handler
+        )
+        self.dp.callback_query(F.data.startswith("calc_models_page:"))(
+            self.calc_models_page_handler
         )
         self.dp.callback_query(F.data == "calc_usd")(self.calc_usd_handler)
         self.dp.callback_query(F.data.startswith("calc_algorithm:"))(
             self.calc_algorithm_handler
         )
-        self.dp.callback_query(F.data == "back_calc_method")(
-            self.back_calc_method_handler
-        )
+        self.dp.callback_query(F.data == "back_calc_method")(self.calc_method_handler)
         self.dp.callback_query(F.data == "back_calc_manufacturer")(
             self.back_calc_manufacturer_handler
         )
+        self.dp.callback_query(F.data == "back_calc_line")(self.back_calc_line_handler)
         self.dp.callback_query(F.data == "back_calc_model")(
             self.back_calc_model_handler
         )
@@ -114,8 +128,20 @@ class Client:
         self.dp.message(SellForm.description)(self.sell_description_handler)
         self.dp.message(SellForm.contact)(self.sell_contact_handler)
 
-        self.dp.callback_query(F.data.startswith("devices_page:"))(
-            self.devices_page_handler
+        self.dp.callback_query(F.data.startswith("chars_manufacturer:"))(
+            self.chars_manufacturer_handler
+        )
+        self.dp.callback_query(F.data.startswith("chars_model:"))(
+            self.chars_model_handler
+        )
+        self.dp.callback_query(F.data == "back_chars_models")(
+            self.back_chars_models_handler
+        )
+        self.dp.callback_query(F.data.startswith("chars_line:"))(
+            self.chars_model_line_handler
+        )
+        self.dp.callback_query(F.data == "back_chars_lines")(
+            self.back_chars_lines_handler
         )
 
     async def channel_message_handler(self, message: types.Message):
@@ -183,6 +209,29 @@ class Client:
         except TelegramBadRequest:
             pass
 
+    async def send_file_price(self, call: types.CallbackQuery, state: FSMContext):
+        await state.clear()
+        await call.message.delete()
+
+        file_path = "/Users/andrijserbak/Desktop/workfolder/tgbotproject/mainercrypto/image/repare.pdf"
+
+        try:
+            await self.bot.send_document(
+                chat_id=call.from_user.id,
+                document=types.FSInputFile(file_path),
+                caption="💸 Прайс ремонта машинок. Для запроса обратитесь к менеджеру @vadim_0350",
+                parse_mode=None,
+                reply_markup=await ClientKB.back_ai(),
+            )
+            logger.info(f"Файл успешно отправлен пользователю {call.from_user.id}")
+
+        except FileNotFoundError:
+            logger.error(f"Файл не найден: {file_path}")
+            await call.message.answer("❌ Файл временно недоступен")
+        except Exception as e:
+            logger.error(f"Ошибка при отправке файла: {e}")
+            await call.message.answer("❌ Произошла ошибка при отправке файла")
+
     async def price_list_handler(self, call: types.CallbackQuery):
         try:
             link = await self.calculator_req.get_link()
@@ -206,10 +255,7 @@ class Client:
 
     async def profile_handler(self, call: types.CallbackQuery):
         await call.message.delete()
-        notifications_status = await self.user_req.get_user_notifications_status(
-            call.from_user.id
-        )
-        kb = await ClientKB.profile_menu(notifications_status)
+        kb = await ClientKB.profile_menu()
         await self.bot.send_message(
             call.from_user.id, "👤 Ваш профиль:", reply_markup=kb
         )
@@ -229,59 +275,143 @@ class Client:
         except TelegramBadRequest:
             pass
 
-    async def calc_chars_handler(
-        self, call: types.CallbackQuery, state: FSMContext = None
-    ):
-        if state:
-            await state.clear()
+    async def calc_chars_handler(self, call: types.CallbackQuery, state: FSMContext):
+        await state.clear()
+        await call.message.edit_text(
+            "🏭 Выберите производителя:",
+            reply_markup=await ClientKB.chars_manufacturer(),
+        )
+        try:
+            await call.answer()
+        except TelegramBadRequest:
+            pass
 
-        devices = await self.calculator_req.get_all_asic_models()
-        if not devices:
-            await call.message.edit_text("❌ Нет данных об оборудовании")
+    async def chars_manufacturer_handler(
+        self, call: types.CallbackQuery, state: FSMContext
+    ):
+        manufacturer_name = call.data.split(":")[1]
+        manufacturer = Manufacturer(manufacturer_name)
+
+        model_lines = await self.calculator_req.get_model_lines_by_manufacturer(
+            manufacturer
+        )
+        if not model_lines:
+            await call.message.edit_text(
+                "❌ Нет модельных линеек для этого производителя"
+            )
             try:
                 await call.answer()
             except TelegramBadRequest:
                 pass
             return
 
-        await state.update_data(all_devices=devices, current_page=0)
-        await self.show_devices_page(call, devices, 0)
-
-    async def show_devices_page(
-        self, call: types.CallbackQuery, devices: list, page: int
-    ):
-        items_per_page = 8
-        total_pages = (len(devices) + items_per_page - 1) // items_per_page
-
-        start_idx = page * items_per_page
-        end_idx = min(start_idx + items_per_page, len(devices))
-        current_devices = devices[start_idx:end_idx]
-
-        message = f"📊 Характеристики оборудования (стр. {page + 1}/{total_pages}):\n\n"
-        for device in current_devices:
-            message += (
-                f"🏷️ {device.manufacturer.value} {device.name}\n"
-                f"   ⚙️ Алгоритм: {device.algorithm.value}\n"
-                f"   ⚡ Хешрейт: {device.hash_rate} {'TH/s' if device.hash_rate > 1 else 'GH/s'}\n"
-                f"   🔌 Потребление: {device.power_consumption}W\n"
-                f"   💰 Цена: ${device.price_usd}\n"
-                f"   🪙 Добывает: {device.get_coin if device.get_coin else 'Не указано'}\n"
-                "━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            )
-
-        kb = await ClientKB.devices_pagination(page, total_pages)
-        await call.message.edit_text(message, reply_markup=kb)
+        await state.update_data(manufacturer=manufacturer)
+        await call.message.edit_text(
+            f"📱 Выберите модельную линейку {manufacturer.value}:",
+            reply_markup=await ClientKB.chars_model_lines(model_lines),
+        )
         try:
             await call.answer()
         except TelegramBadRequest:
             pass
 
-    async def devices_page_handler(self, call: types.CallbackQuery, state: FSMContext):
-        page = int(call.data.split(":")[1])
-        data = await state.get_data()
-        devices = data["all_devices"]
-        await state.update_data(current_page=page)
-        await self.show_devices_page(call, devices, page)
+    async def chars_model_line_handler(
+        self, call: types.CallbackQuery, state: FSMContext
+    ):
+        model_line_id = int(call.data.split(":")[1])
+        model_line = await self.calculator_req.get_model_line_by_id(model_line_id)
+
+        if not model_line:
+            await call.message.edit_text("❌ Модельная линейка не найдена")
+            try:
+                await call.answer()
+            except TelegramBadRequest:
+                pass
+            return
+
+        # Получаем все модели для этой линейки
+        models = await self.calculator_req.get_asic_models_by_model_line(model_line_id)
+        if not models:
+            await call.message.edit_text("❌ Нет моделей для этой линейки")
+            try:
+                await call.answer()
+            except TelegramBadRequest:
+                pass
+            return
+
+        await state.update_data(model_line=model_line)
+        await call.message.edit_text(
+            f"🔧 Выберите модель {model_line.manufacturer.value} {model_line.name}:",
+            reply_markup=await ClientKB.chars_models(models),
+        )
+        try:
+            await call.answer()
+        except TelegramBadRequest:
+            pass
+
+    async def chars_model_handler(self, call: types.CallbackQuery, state: FSMContext):
+        model_id = int(call.data.split(":")[1])
+
+        # Получаем конкретную модель
+        model = await self.calculator_req.get_asic_model_by_id(model_id)
+        if not model:
+            await call.message.edit_text("❌ Модель не найдена")
+            try:
+                await call.answer()
+            except TelegramBadRequest:
+                pass
+            return
+
+        # Получаем информацию о модельной линейке
+        model_line = await self.calculator_req.get_model_line_by_id(model.model_line_id)
+        if not model_line:
+            await call.message.edit_text("❌ Информация о модельной линейке не найдена")
+            try:
+                await call.answer()
+            except TelegramBadRequest:
+                pass
+            return
+
+        message = (
+            f"🔧 **{model_line.manufacturer.value} {model.name}**\n\n"
+            f"⚙️ **Алгоритм:** {model_line.algorithm.value}\n"
+            f"⚡ **Хешрейт:** {model.hash_rate} {'TH/s' if model.hash_rate > 1 else 'GH/s'}\n"
+            f"🔌 **Потребление:** {model.power_consumption}W\n"
+        )
+
+        if model.get_coin:
+            message += f"🪙 **Добывает:** {model.get_coin}\n"
+
+        await call.message.edit_text(message, reply_markup=await ClientKB.chars_back())
+        try:
+            await call.answer()
+        except TelegramBadRequest:
+            pass
+
+    async def back_chars_models_handler(
+        self, call: types.CallbackQuery, state: FSMContext
+    ):
+        try:
+            data = await state.get_data()
+            manufacturer = data["manufacturer"]
+
+            model_lines = await self.calculator_req.get_model_lines_by_manufacturer(
+                manufacturer
+            )
+
+            await call.message.edit_text(
+                f"📱 Выберите модельную линейку {manufacturer.value}:",
+                reply_markup=await ClientKB.chars_model_lines(model_lines),
+            )
+        except TelegramBadRequest as e:
+            # Игнорируем ошибку "message not modified"
+            if "message is not modified" not in str(e):
+                raise
+        finally:
+            try:
+                await call.answer()
+            except TelegramBadRequest:
+                pass
 
     async def calc_coins_handler(self, call: types.CallbackQuery):
         coins = await self.coin_req.get_all_coins()
@@ -293,30 +423,29 @@ class Client:
                 pass
             return
 
-        message = "💎 Текущие цены монет:\n\n"
-        for coin in coins:
-            change_icon = "📈" if coin.price_change_24h >= 0 else "📉"
-            change_text = f"{coin.price_change_24h:+.1f}%"
+        # Определяем порядок сортировки
+        priority_order = ["BTC", "ETH", "LTC", "DOGE", "KAS"]
 
+        # Создаем словарь для быстрого доступа к индексу приоритета
+        priority_dict = {symbol: index for index, symbol in enumerate(priority_order)}
+
+        # Сортируем монеты: сначала приоритетные в заданном порядке, затем остальные
+        def sort_key(coin):
+            if coin.symbol in priority_dict:
+                return priority_dict[coin.symbol]
+            else:
+                return len(priority_order)  # Помещаем остальные монеты в конец
+
+        sorted_coins = sorted(coins, key=sort_key)
+
+        message = "💎 Текущие цены монет:\n\n"
+        for coin in sorted_coins:
             message += (
                 f"🔸 {coin.symbol} ({coin.name})\n"
-                f"   💵 ${coin.current_price_usd:,.2f} | ₽{coin.current_price_rub:,.0f}\n"
-                f"   {change_icon} {change_text}\n"
-                f"   📅 Обновлено: {coin.last_updated.strftime('%d.%m.%Y %H:%M')}\n\n"
+                f"   💵 ${coin.current_price_usd:,.2f} | ₽{coin.current_price_rub:,.0f}\n\n"
             )
 
-        message += "Цены обновляются ежедневно в 10:00 по Москве 🕙"
         await call.message.edit_text(message, reply_markup=await ClientKB.back_calc())
-        try:
-            await call.answer()
-        except TelegramBadRequest:
-            pass
-
-    async def notify_toggle_handler(self, call: types.CallbackQuery):
-        new_status = await self.user_req.toggle_notifications(call.from_user.id)
-        status_text = "включены" if new_status else "выключены"
-        kb = await ClientKB.profile_menu(new_status)
-        await call.message.edit_text(f"🔔 Уведомления {status_text}", reply_markup=kb)
         try:
             await call.answer()
         except TelegramBadRequest:
@@ -326,7 +455,7 @@ class Client:
         await call.message.delete()
         await self.bot.send_message(
             call.from_user.id,
-            "📸 Пришлите скриншот, где видно предложение конкурента:",
+            "📸 Пришлите скриншот с ценой конкурента:",
         )
         await state.set_state(BetterPriceState.waiting_photo)
         try:
@@ -350,7 +479,7 @@ class Client:
 
         await message.answer_photo(
             photo=data["photo"],
-            caption=f"<b>Предпросмотр:</b>\n\n{data['comment']}",
+            caption=f"<b>Предпросмотр:</b>\n\n{data['comment']}\n\nОт: @{message.from_user.username or message.from_user.first_name}",
             parse_mode="HTML",
             reply_markup=await ClientKB.confirm_a(),
         )
@@ -375,9 +504,10 @@ class Client:
                 photo=data["photo"],
                 caption=(
                     f"<b>Заявка «Лучшая цена»</b>\n"
-                    f"От: {user.username}\n"
+                    f"От: @{user.username or user.first_name}\n"
                     f"ID: <code>{user.id}</code>\n\n"
-                    f"{data['comment']}"
+                    f"{data['comment']}\n\n"
+                    f"С вами скоро свяжется менеджер @vadim_0350."
                 ),
                 parse_mode="HTML",
             )
@@ -390,7 +520,8 @@ class Client:
             return
 
         await call.message.edit_caption(
-            caption="✅ Спасибо! Менеджер скоро свяжется с вами."
+            caption="✅ Спасибо! С вами скоро свяжется менеджер @vadim_0350.",
+            parse_mode=None,
         )
         await state.clear()
 
@@ -400,99 +531,113 @@ class Client:
             message_text = f"📖 {guide.title}\n\n{guide.content}"
             await message.answer(message_text)
         else:
-            await message.answer("❌ Руководство по б/у устройствам пока не доступно")
+            await message.answer("❌ Гайд пока недоступен")
 
-    async def sell_start_handler(self, message: types.Message, state: FSMContext):
-        devices = await self.calculator_req.get_all_asic_models()
-        if not devices:
-            await message.answer("❌ Нет данных об оборудовании")
-            return
-        message_text = "🎯 Выберите тип оборудования для продажи:\n\n"
-        for device in devices:
-            message_text += (
-                f"🔹 {device.id}. {device.manufacturer.value} {device.name}\n"
-            )
-        message_text += "\nВведите номер оборудования:"
-        await message.answer(message_text)
-        await state.set_state(SellForm.device)
+    async def faq_handler(self, message: types.Message):
+        await message.answer(
+            """📦 <b>Мы отправляем оборудование:</b>
 
-    async def sell_device_handler(self, message: types.Message, state: FSMContext):
+<blockquote>
+— Любой удобной вам ТК (<b>СДЭК</b>, <b>Деловые Линии</b> и т.д.)
+— Можно забрать лично в офисе
+— Или через вашего гаранта
+</blockquote>
+
+<b>💰 Оплатить можно:</b>
+
+<blockquote>
+— <b>Наличными</b> при встрече
+— Криптой (<b>USDT</b>) — актуальный курс подскажет менеджер
+</blockquote>
+
+👨‍💼 Менеджер: <a href="https://t.me/vadim_0350">@vadim_0350</a>
+📢 Канал: <a href="https://t.me/asic_plus">@asic_plus</a>
+""",
+            parse_mode="HTML",
+            disable_web_page_preview=True,
+            reply_markup=await ClientKB.back_ai(),
+        )
+
+    async def ai_consult_start(self, call: types.CallbackQuery, state: FSMContext):
+        await call.message.delete()
+        await self.bot.send_message(
+            call.from_user.id,
+            "💬 Задайте ваш вопрос по майнингу:",
+            reply_markup=await ClientKB.back_ai(),
+        )
+        await state.set_state(FreeAiState.chat)
         try:
-            device_id = int(message.text)
-            device = await self.calculator_req.get_asic_model_by_id(device_id)
-            if not device:
-                await message.answer(
-                    "❌ Неверный номер оборудования. Попробуйте снова:"
+            await call.answer()
+        except TelegramBadRequest:
+            pass
+
+    async def prepare_ai_context(self) -> Dict[str, Any]:
+        context = {
+            "asic_models": [],
+            "coins": [],
+            "usd_rub_rate": 80.0,
+        }
+
+        try:
+            models = await self.calculator_req.get_all_asic_models()
+            for model in models:
+                model_line = await self.calculator_req.get_model_line_by_id(
+                    model.model_line_id
                 )
-                return
-            await state.update_data(device_id=device_id)
-            await message.answer(
-                f"💵 Введите цену продажи для {device.manufacturer.value} {device.name} (USD):"
-            )
-            await state.set_state(SellForm.price)
-        except ValueError:
-            await message.answer("❌ Введите корректный номер оборудования:")
+                context["asic_models"].append(
+                    {
+                        "name": model.name,
+                        "manufacturer": (
+                            model_line.manufacturer.value if model_line else "Unknown"
+                        ),
+                        "hash_rate": model.hash_rate,
+                        "power": model.power_consumption,
+                        "algorithm": (
+                            model_line.algorithm.value if model_line else "Unknown"
+                        ),
+                    }
+                )
 
-    async def sell_price_handler(self, message: types.Message, state: FSMContext):
-        try:
-            price = float(message.text.replace(",", "."))
-            await state.update_data(price=price)
-            await message.answer(
-                "📝 Опишите состояние оборудования (новое/б/у/отличное/хорошее):"
-            )
-            await state.set_state(SellForm.condition)
-        except ValueError:
-            await message.answer("❌ Введите корректную цену:")
+            coins = await self.coin_req.get_all_coins()
+            for coin in coins:
+                context["coins"].append(
+                    {
+                        "symbol": coin.symbol,
+                        "name": coin.name,
+                        "price": coin.current_price_usd,
+                        "price_rub": coin.current_price_rub,
+                    }
+                )
 
-    async def sell_condition_handler(self, message: types.Message, state: FSMContext):
-        await state.update_data(condition=message.text)
+            coin_service = CoinGeckoService(self.settings)
+            context["usd_rub_rate"] = await coin_service.get_usd_rub_rate()
+
+        except Exception as e:
+            print(f"Ошибка при подготовке контекста для AI: {e}")
+
+        return context
+
+    async def ai_chat_handler(self, message: types.Message, state: FSMContext):
+
+        context = await self.prepare_ai_context()
+
+        response = await ask_ishushka("nnUWipE0Hv", message.text, context)
         await message.answer(
-            "📋 Опишите подробнее ваше оборудование (год покупки, наработка часов и т.д.):"
+            response, parse_mode=None, reply_markup=await ClientKB.back_ai()
         )
-        await state.set_state(SellForm.description)
-
-    async def sell_description_handler(self, message: types.Message, state: FSMContext):
-        await state.update_data(description=message.text)
-        await message.answer(
-            "📞 Введите контактную информацию для связи (телеграм @username или телефон):"
-        )
-        await state.set_state(SellForm.contact)
-
-    async def sell_contact_handler(self, message: types.Message, state: FSMContext):
-        await state.update_data(contact=message.text)
-        data = await state.get_data()
-        device = await self.calculator_req.get_asic_model_by_id(data["device_id"])
-        user = await self.user_req.get_user_by_uid(message.from_user.id)
-        request_id = await self.sell_req.create_sell_request(
-            user_id=user.id,
-            device_id=data["device_id"],
-            price=data["price"],
-            condition=data["condition"],
-            description=data["description"],
-            contact_info=data["contact"],
-        )
-        response_message = (
-            "✅ Заявка на продажу создана!\n\n"
-            f"🏷️ Оборудование: {device.manufacturer.value} {device.name}\n"
-            f"💵 Цена: ${data['price']}\n"
-            f"📝 Состояние: {data['condition']}\n"
-            f"📞 Контакты: {data['contact']}\n\n"
-            "Менеджер свяжется с вами в ближайшее время."
-        )
-        await message.answer(response_message, reply_markup=await ClientKB.main_menu())
-        await state.clear()
 
     async def calc_method_handler(self, call: types.CallbackQuery, state: FSMContext):
         method = call.data.split(":")[1]
-        await state.update_data(calc_method=method)
+        await state.update_data(method=method)
+
         if method == "asic":
             await call.message.edit_text(
                 "🏭 Выберите производителя:",
                 reply_markup=await CalculatorKB.choose_manufacturer(),
             )
-        else:
+        elif method == "hashrate":
             await call.message.edit_text(
-                "⚙️ Выберите алгоритм для расчета:",
+                "⚙️ Выберите алгоритм:",
                 reply_markup=await CalculatorKB.choose_algorithm(),
             )
         try:
@@ -505,19 +650,90 @@ class Client:
     ):
         manufacturer_name = call.data.split(":")[1]
         manufacturer = Manufacturer(manufacturer_name)
-        await state.update_data(manufacturer=manufacturer)
-        models = await self.calculator_req.get_asic_models_by_manufacturer(manufacturer)
-        if not models:
-            await call.message.edit_text("❌ Нет моделей для этого производителя")
+
+        model_lines = await self.calculator_req.get_model_lines_by_manufacturer(
+            manufacturer
+        )
+        if not model_lines:
+            await call.message.edit_text(
+                "❌ Нет модельных линеек для этого производителя"
+            )
             try:
                 await call.answer()
             except TelegramBadRequest:
                 pass
             return
+
+        await state.update_data(manufacturer=manufacturer)
         await call.message.edit_text(
-            "📱 Выберите модель ASIC-майнера для расчёта:",
-            reply_markup=await CalculatorKB.choose_asic_models(models),
+            f"📱 Выберите модельную линейку {manufacturer.value}:",
+            reply_markup=await CalculatorKB.choose_model_lines(model_lines, page=0),
         )
+        try:
+            await call.answer()
+        except TelegramBadRequest:
+            pass
+
+    async def calc_model_line_handler(
+        self, call: types.CallbackQuery, state: FSMContext
+    ):
+        model_line_id = int(call.data.split(":")[1])
+        model_line = await self.calculator_req.get_model_line_by_id(model_line_id)
+        if not model_line:
+            await call.message.edit_text("❌ Модельная линейка не найдена")
+            try:
+                await call.answer()
+            except TelegramBadRequest:
+                pass
+            return
+
+        models = await self.calculator_req.get_asic_models_by_model_line(model_line_id)
+        if not models:
+            await call.message.edit_text("❌ Нет моделей для этой линейки")
+            try:
+                await call.answer()
+            except TelegramBadRequest:
+                pass
+            return
+
+        await state.update_data(model_line=model_line)
+        await call.message.edit_text(
+            f"🔧 Выберите модель {model_line.manufacturer.value} {model_line.name}:",
+            reply_markup=await CalculatorKB.choose_asic_models_by_line(
+                models, model_line.name, page=0
+            ),
+        )
+        try:
+            await call.answer()
+        except TelegramBadRequest:
+            pass
+
+    async def calc_models_page_handler(
+        self, call: types.CallbackQuery, state: FSMContext
+    ):
+        page = int(call.data.split(":")[1])
+        data = await state.get_data()
+
+        if "model_line" in data:
+            model_line = data["model_line"]
+            models = await self.calculator_req.get_asic_models_by_model_line(
+                model_line.id
+            )
+            await call.message.edit_reply_markup(
+                reply_markup=await CalculatorKB.choose_asic_models_by_line(
+                    models, model_line.name, page=page
+                )
+            )
+        else:
+            manufacturer = data["manufacturer"]
+            model_lines = await self.calculator_req.get_model_lines_by_manufacturer(
+                manufacturer
+            )
+            await call.message.edit_reply_markup(
+                reply_markup=await CalculatorKB.choose_model_lines(
+                    model_lines, page=page
+                )
+            )
         try:
             await call.answer()
         except TelegramBadRequest:
@@ -525,9 +741,18 @@ class Client:
 
     async def calc_model_handler(self, call: types.CallbackQuery, state: FSMContext):
         model_id = int(call.data.split(":")[1])
-        await state.update_data(model_id=model_id)
+        model = await self.calculator_req.get_asic_model_by_id(model_id)
+        if not model:
+            await call.message.edit_text("❌ Модель не найдена")
+            try:
+                await call.answer()
+            except TelegramBadRequest:
+                pass
+            return
+
+        await state.update_data(model_id=model_id, model=model)
         await call.message.edit_text(
-            "💡 Введите цену на электроэнергию (кВт/ч) в рублях\n\nПример: 7.3",
+            "💡 Введите стоимость электроэнергии (₽/кВт·ч):",
             reply_markup=await CalculatorKB.electricity_input(),
         )
         await state.set_state(CalculatorState.input_electricity_price)
@@ -539,54 +764,14 @@ class Client:
     async def calc_algorithm_handler(
         self, call: types.CallbackQuery, state: FSMContext
     ):
-        algorithm_value = call.data.split(":")[1]
-        algorithm = None
-        for algo in Algorithm:
-            if algo.value == algorithm_value:
-                algorithm = algo
-                break
-        if algorithm is None:
-            await call.message.edit_text("❌ Алгоритм не найден")
-            try:
-                await call.answer()
-            except TelegramBadRequest:
-                pass
-            return
+        algorithm_name = call.data.split(":")[1]
+        algorithm = Algorithm(algorithm_name)
         await state.update_data(algorithm=algorithm)
         await call.message.edit_text(
-            "💡 Введите цену на электроэнергию (кВт/ч) в рублях\n\nПример: 7.3",
-            reply_markup=await CalculatorKB.electricity_input(),
+            "⚡ Введите ваш хешрейт (TH/s):",
+            reply_markup=await CalculatorKB.hashrate_input(),
         )
-        await state.set_state(CalculatorState.input_electricity_price)
-        try:
-            await call.answer()
-        except TelegramBadRequest:
-            pass
-
-    async def calc_usd_handler(self, call: types.CallbackQuery, state: FSMContext):
-        data = await state.get_data()
-        result = data["calculation_result"]
-        coin_symbol = data["coin_symbol"]
-        from utils.calculator import MiningCalculator
-
-        text = (
-            f"🔧 **Оборудование:** {data.get('model_name', '')}\n"
-            if data.get("model_name")
-            else ""
-        )
-        text += (
-            f"⚙️ **Алгоритм:** {data.get('algorithm_name', '')}\n"
-            if data.get("algorithm_name")
-            else ""
-        )
-        text += f"💰 **Криптовалюта:** {data.get('coin_name', '')} ({coin_symbol})\n"
-        text += f"📈 **Курс {coin_symbol}:** ${data['coin_price']:.4f}\n"
-        text += f"💵 **Курс доллара:** {80.0} руб.\n\n"
-        text += MiningCalculator.format_result(result, coin_symbol)
-
-        await call.message.edit_text(
-            text, reply_markup=await CalculatorKB.result_menu()
-        )
+        await state.set_state(CalculatorState.input_hashrate)
         try:
             await call.answer()
         except TelegramBadRequest:
@@ -595,146 +780,285 @@ class Client:
     async def calc_electricity_handler(self, message: types.Message, state: FSMContext):
         try:
             electricity_price = float(message.text.replace(",", "."))
-            await state.update_data(electricity_price=electricity_price)
-            data = await state.get_data()
-            if data.get("calc_method") == "asic":
-                await self.calculate_profitability(message, state)
-            else:
-                await message.answer(
-                    "⚡ Введите количество хешрейта (GH/s)\n\nПример: 110",
-                    reply_markup=await CalculatorKB.hashrate_input(),
-                )
-                await state.set_state(CalculatorState.input_hashrate)
+            if electricity_price <= 0:
+                raise ValueError
         except ValueError:
-            await message.answer("❌ Введите корректное число:")
+            await message.answer(
+                "❌ Неверный формат. Введите число больше нуля:",
+                reply_markup=await CalculatorKB.electricity_input(),
+            )
+            return
+
+        await state.update_data(electricity_price=electricity_price)
+        data = await state.get_data()
+
+        coin_service = CoinGeckoService(self.settings)
+        usd_to_rub = await coin_service.get_usd_rub_rate()
+
+        if data.get("method") == "asic":
+            model = data["model"]
+            model_line = await self.calculator_req.get_model_line_by_id(
+                model.model_line_id
+            )
+            algorithm_data = await self.calculator_req.get_algorithm_data(
+                model_line.algorithm
+            )
+            coin = await self.calculator_req.get_coin_by_symbol(
+                algorithm_data.default_coin
+            )
+
+            result = MiningCalculator.calculate_profitability(
+                hash_rate_ths=model.hash_rate,
+                power_consumption=model.power_consumption,
+                electricity_price_rub=electricity_price,
+                coin_price_usd=coin.current_price_usd,
+                network_hashrate_ths=algorithm_data.network_hashrate,
+                block_reward=algorithm_data.block_reward,
+                usd_to_rub=usd_to_rub,
+            )
+
+            text = (
+                f"🔧 **Оборудование:** {model_line.manufacturer.value} {model.name}\n"
+            )
+            text += f"⚡ **Хэшрейт:** {model.hash_rate} TH/s\n"
+            text += f"🔌 **Потребление:** {model.power_consumption}W\n\n"
+            # ИЗМЕНЕНИЕ: сначала показываем в долларах
+            text += MiningCalculator.format_result(result, coin.symbol, usd_to_rub)
+
+        else:
+            algorithm = data["algorithm"]
+            hashrate = data["hashrate"]
+            power = data["power"]
+
+            algorithm_data = await self.calculator_req.get_algorithm_data(algorithm)
+            coin = await self.calculator_req.get_coin_by_symbol(
+                algorithm_data.default_coin
+            )
+
+            result = MiningCalculator.calculate_profitability(
+                hash_rate_ths=hashrate,
+                power_consumption=power,
+                electricity_price_rub=electricity_price,
+                coin_price_usd=coin.current_price_usd,
+                network_hashrate_ths=algorithm_data.network_hashrate,
+                block_reward=algorithm_data.block_reward,
+                usd_to_rub=usd_to_rub,
+            )
+
+            text = f"⚙️ **Алгоритм:** {algorithm.value}\n"
+            text += f"⚡ **Хэшрейт:** {hashrate} TH/s\n"
+            text += f"🔌 **Мощность:** {power}W\n\n"
+            # ИЗМЕНЕНИЕ: сначала показываем в долларах
+            text += MiningCalculator.format_result(result, coin.symbol, usd_to_rub)
+
+        # ИЗМЕНЕНИЕ: используем меню для долларов
+        await message.answer(text, reply_markup=await CalculatorKB.result_menu())
+        await state.set_state(CalculatorState.show_result)
 
     async def calc_hashrate_handler(self, message: types.Message, state: FSMContext):
         try:
             hashrate = float(message.text.replace(",", "."))
-            await state.update_data(hashrate=hashrate)
-            await message.answer(
-                "🔌 Введите суммарную мощность (Вт)\n\nПример: 3250",
-                reply_markup=await CalculatorKB.power_input(),
-            )
-            await state.set_state(CalculatorState.input_power)
+            if hashrate <= 0:
+                raise ValueError
         except ValueError:
-            await message.answer("❌ Введите корректное число:")
+            await message.answer(
+                "❌ Неверный формат. Введите число больше нуля:",
+                reply_markup=await CalculatorKB.hashrate_input(),
+            )
+            return
+
+        await state.update_data(hashrate=hashrate)
+        await message.answer(
+            "🔌 Введите потребляемую мощность (W):",
+            reply_markup=await CalculatorKB.power_input(),
+        )
+        await state.set_state(CalculatorState.input_power)
 
     async def calc_power_handler(self, message: types.Message, state: FSMContext):
         try:
             power = float(message.text.replace(",", "."))
-            await state.update_data(power=power)
-            await self.calculate_profitability(message, state)
+            if power <= 0:
+                raise ValueError
         except ValueError:
-            await message.answer("❌ Введите корректное число:")
-
-    async def calculate_profitability(self, message: types.Message, state: FSMContext):
-        data = await state.get_data()
-        electricity_price_rub = data["electricity_price"]
-        electricity_price_usd = electricity_price_rub / 80.0
-
-        if data.get("calc_method") == "asic":
-            model = await self.calculator_req.get_asic_model_by_id(data["model_id"])
-            algorithm_data = await self.calculator_req.get_algorithm_data(
-                model.algorithm
+            await message.answer(
+                "❌ Неверный формат. Введите число больше нуля:",
+                reply_markup=await CalculatorKB.power_input(),
             )
-            if not algorithm_data:
-                await message.answer(
-                    "❌ Для выбранного алгоритма нет данных. Обратитесь к администратору."
-                )
-                return
+            return
+
+        await state.update_data(power=power)
+        data = await state.get_data()
+        algorithm = data["algorithm"]
+        hashrate = data["hashrate"]
+        power = data["power"]
+
+        await message.answer(
+            "💡 Введите стоимость электроэнергии (₽/кВт·ч):",
+            reply_markup=await CalculatorKB.electricity_input(),
+        )
+        await state.set_state(CalculatorState.input_electricity_price)
+
+    async def calc_usd_handler(self, call: types.CallbackQuery, state: FSMContext):
+        data = await state.get_data()
+        electricity_price = data["electricity_price"]
+
+        coin_service = CoinGeckoService(self.settings)
+        usd_to_rub = await coin_service.get_usd_rub_rate()
+
+        if data.get("method") == "asic":
+            model = data["model"]
+            model_line = await self.calculator_req.get_model_line_by_id(
+                model.model_line_id
+            )
+            algorithm_data = await self.calculator_req.get_algorithm_data(
+                model_line.algorithm
+            )
             coin = await self.calculator_req.get_coin_by_symbol(
                 algorithm_data.default_coin
             )
-            if not coin:
-                await message.answer(
-                    "❌ Цена для монеты не установлена. Обратитесь к администратору."
-                )
-                return
-            hash_rate = model.hash_rate
-            power_consumption = model.power_consumption
-            algorithm_dict = {
-                "network_hashrate": algorithm_data.network_hashrate,
-                "block_reward": algorithm_data.block_reward,
-            }
-            text = f"🔧 **Оборудование:** {model.manufacturer.value} {model.name}\n"
-            text += (
-                f"⚡ **Хэшрейт:** {hash_rate} {'TH/s' if hash_rate > 1 else 'GH/s'}\n\n"
+
+            result = MiningCalculator.calculate_profitability(
+                hash_rate_ths=model.hash_rate,
+                power_consumption=model.power_consumption,
+                electricity_price_rub=electricity_price,
+                coin_price_usd=coin.current_price_usd,
+                network_hashrate_ths=algorithm_data.network_hashrate,
+                block_reward=algorithm_data.block_reward,
+                usd_to_rub=usd_to_rub,
             )
+
+            text = (
+                f"🔧 **Оборудование:** {model_line.manufacturer.value} {model.name}\n"
+            )
+            text += f"⚡ **Хэшрейт:** {model.hash_rate} TH/s\n"
+            text += f"🔌 **Потребление:** {model.power_consumption}W\n\n"
+            # Возвращаем к долларовому формату
+            text += MiningCalculator.format_result(result, coin.symbol, usd_to_rub)
+
         else:
             algorithm = data["algorithm"]
+            hashrate = data["hashrate"]
+            power = data["power"]
+
             algorithm_data = await self.calculator_req.get_algorithm_data(algorithm)
-            if not algorithm_data:
-                await message.answer(
-                    "❌ Для выбранного алгоритма нет данных. Обратитесь к администратору."
-                )
-                return
-            print(algorithm_data.default_coin)
             coin = await self.calculator_req.get_coin_by_symbol(
                 algorithm_data.default_coin
             )
-            print(coin)
-            if not coin:
-                await message.answer(
-                    "❌ Цена для монета не установлена. Обратитесь к администратору."
-                )
-                return
-            hash_rate = data["hashrate"]
-            power_consumption = data["power"]
-            algorithm_dict = {
-                "network_hashrate": algorithm_data.network_hashrate,
-                "block_reward": algorithm_data.block_reward,
-            }
+
+            result = MiningCalculator.calculate_profitability(
+                hash_rate_ths=hashrate,
+                power_consumption=power,
+                electricity_price_rub=electricity_price,
+                coin_price_usd=coin.current_price_usd,
+                network_hashrate_ths=algorithm_data.network_hashrate,
+                block_reward=algorithm_data.block_reward,
+                usd_to_rub=usd_to_rub,
+            )
+
             text = f"⚙️ **Алгоритм:** {algorithm.value}\n"
-            text += f"⚡ **Хэшрейт:** {hash_rate} GH/s\n"
-            text += f"🔌 **Мощность:** {power_consumption} W\n\n"
+            text += f"⚡ **Хэшрейт:** {hashrate} TH/s\n"
+            text += f"🔌 **Мощность:** {power}W\n\n"
+            # Возвращаем к долларовому формату
+            text += MiningCalculator.format_result(result, coin.symbol, usd_to_rub)
 
-        from utils.calculator import MiningCalculator
+        # Используем меню для долларов
+        await call.message.edit_text(
+            text, reply_markup=await CalculatorKB.result_menu()
+        )
 
-        result = MiningCalculator.calculate_profitability(
-            hash_rate=hash_rate,
-            power_consumption=power_consumption,
-            electricity_price=electricity_price_usd,
-            coin_price=coin.current_price_usd,
-            algorithm_data=algorithm_dict,
-        )
-        text += f"💰 **Криптовалюта:** {coin.name} ({coin.symbol})\n"
-        text += f"📈 **Курс {coin.symbol}:** ${coin.current_price_usd:.4f}\n"
-        text += f"💵 **Курс доллара:** {80.0} руб.\n\n"
-        text += MiningCalculator.format_result(result, coin.symbol)
-        await state.update_data(
-            calculation_result=result,
-            coin_symbol=coin.symbol,
-            coin_name=coin.name,
-            coin_price=coin.current_price_usd,
-            model_name=(
-                f"{model.manufacturer.value} {model.name}"
-                if data.get("calc_method") == "asic"
-                else ""
-            ),
-            algorithm_name=(
-                algorithm.value if data.get("calc_method") == "hashrate" else ""
-            ),
-        )
-        await state.set_state(CalculatorState.show_result)
-        await message.answer(text, reply_markup=await CalculatorKB.result_menu())
+    async def back_chars_lines_handler(
+        self, call: types.CallbackQuery, state: FSMContext
+    ):
+        try:
+            data = await state.get_data()
+            manufacturer = data["manufacturer"]
+
+            model_lines = await self.calculator_req.get_model_lines_by_manufacturer(
+                manufacturer
+            )
+
+            await call.message.edit_text(
+                f"📱 Выберите модельную линейку {manufacturer.value}:",
+                reply_markup=await ClientKB.chars_model_lines(model_lines),
+            )
+        except TelegramBadRequest as e:
+            if "message is not modified" not in str(e):
+                raise
+        finally:
+            try:
+                await call.answer()
+            except TelegramBadRequest:
+                pass
 
     async def calc_rub_handler(self, call: types.CallbackQuery, state: FSMContext):
         data = await state.get_data()
-        result = data["calculation_result"]
-        coin_symbol = data["coin_symbol"]
-        from utils.calculator import MiningCalculator
+        electricity_price = data["electricity_price"]
 
-        text = MiningCalculator.format_result_rub(result, coin_symbol)
+        coin_service = CoinGeckoService(self.settings)
+        usd_to_rub = await coin_service.get_usd_rub_rate()
+
+        if data.get("method") == "asic":
+            model = data["model"]
+            model_line = await self.calculator_req.get_model_line_by_id(
+                model.model_line_id
+            )
+            algorithm_data = await self.calculator_req.get_algorithm_data(
+                model_line.algorithm
+            )
+            coin = await self.calculator_req.get_coin_by_symbol(
+                algorithm_data.default_coin
+            )
+
+            result = MiningCalculator.calculate_profitability(
+                hash_rate_ths=model.hash_rate,
+                power_consumption=model.power_consumption,
+                electricity_price_rub=electricity_price,
+                coin_price_usd=coin.current_price_usd,
+                network_hashrate_ths=algorithm_data.network_hashrate,
+                block_reward=algorithm_data.block_reward,
+                usd_to_rub=usd_to_rub,
+            )
+
+            text = (
+                f"🔧 **Оборудование:** {model_line.manufacturer.value} {model.name}\n"
+            )
+            text += f"⚡ **Хэшрейт:** {model.hash_rate} TH/s\n"
+            text += f"🔌 **Потребление:** {model.power_consumption}W\n\n"
+            # Показываем в рублях
+            text += MiningCalculator.format_result_rub(result, coin.symbol, usd_to_rub)
+
+        else:
+            algorithm = data["algorithm"]
+            hashrate = data["hashrate"]
+            power = data["power"]
+
+            algorithm_data = await self.calculator_req.get_algorithm_data(algorithm)
+            coin = await self.calculator_req.get_coin_by_symbol(
+                algorithm_data.default_coin
+            )
+
+            result = MiningCalculator.calculate_profitability(
+                hash_rate_ths=hashrate,
+                power_consumption=power,
+                electricity_price_rub=electricity_price,
+                coin_price_usd=coin.current_price_usd,
+                network_hashrate_ths=algorithm_data.network_hashrate,
+                block_reward=algorithm_data.block_reward,
+                usd_to_rub=usd_to_rub,
+            )
+
+            text = f"⚙️ **Алгоритм:** {algorithm.value}\n"
+            text += f"⚡ **Хэшрейт:** {hashrate} TH/s\n"
+            text += f"🔌 **Мощность:** {power}W\n\n"
+            # Показываем в рублях
+            text += MiningCalculator.format_result_rub(result, coin.symbol, usd_to_rub)
+
+        # Используем меню для рублей
         await call.message.edit_text(
             text, reply_markup=await CalculatorKB.result_menu_rub()
         )
-        try:
-            await call.answer()
-        except TelegramBadRequest:
-            pass
 
-    async def back_calc_method_handler(
+    async def back_calc_manufacturer_handler(
         self, call: types.CallbackQuery, state: FSMContext
     ):
         await call.message.edit_text(
@@ -746,12 +1070,17 @@ class Client:
         except TelegramBadRequest:
             pass
 
-    async def back_calc_manufacturer_handler(
+    async def back_calc_line_handler(
         self, call: types.CallbackQuery, state: FSMContext
     ):
+        data = await state.get_data()
+        manufacturer = data["manufacturer"]
+        model_lines = await self.calculator_req.get_model_lines_by_manufacturer(
+            manufacturer
+        )
         await call.message.edit_text(
-            "🏭 Выберите производителя:",
-            reply_markup=await CalculatorKB.choose_manufacturer(),
+            f"📱 Выберите модельную линейку {manufacturer.value}:",
+            reply_markup=await CalculatorKB.choose_model_lines(model_lines, page=0),
         )
         try:
             await call.answer()
@@ -762,34 +1091,14 @@ class Client:
         self, call: types.CallbackQuery, state: FSMContext
     ):
         data = await state.get_data()
-
-        if data.get("calc_method") != "asic":
-            await call.message.edit_text(
-                "⚙️ Выберите алгоритм для расчета:",
-                reply_markup=await CalculatorKB.choose_algorithm(),
-            )
-            try:
-                await call.answer()
-            except TelegramBadRequest:
-                pass
-            return
-
-        if "manufacturer" not in data:
-            await call.message.edit_text(
-                "⚙️ Выберите способ расчета:",
-                reply_markup=await CalculatorKB.choose_method(),
-            )
-            try:
-                await call.answer()
-            except TelegramBadRequest:
-                pass
-            return
-
         manufacturer = data["manufacturer"]
-        models = await self.calculator_req.get_asic_models_by_manufacturer(manufacturer)
+        model_line = data["model_line"]
+        models = await self.calculator_req.get_asic_models_by_model_line(model_line.id)
         await call.message.edit_text(
-            "📱 Выберите модель ASIC-майнера для расчёта:",
-            reply_markup=await CalculatorKB.choose_asic_models(models),
+            f"🔧 Выберите модель {model_line.manufacturer.value} {model_line.name}:",
+            reply_markup=await CalculatorKB.choose_asic_models_by_line(
+                models, model_line.name, page=0
+            ),
         )
         try:
             await call.answer()
@@ -800,7 +1109,7 @@ class Client:
         self, call: types.CallbackQuery, state: FSMContext
     ):
         await call.message.edit_text(
-            "⚙️ Выберите алгоритм для расчета:",
+            "⚙️ Выберите алгоритм:",
             reply_markup=await CalculatorKB.choose_algorithm(),
         )
         try:
@@ -812,7 +1121,7 @@ class Client:
         self, call: types.CallbackQuery, state: FSMContext
     ):
         await call.message.edit_text(
-            "⚡ Введите количество хешрейта (GH/s)\n\nПример: 110",
+            "⚡ Введите ваш хешрейт (TH/s):",
             reply_markup=await CalculatorKB.hashrate_input(),
         )
         await state.set_state(CalculatorState.input_hashrate)
@@ -821,79 +1130,99 @@ class Client:
         except TelegramBadRequest:
             pass
 
-    async def ai_consult_start(self, call: types.CallbackQuery, state: FSMContext):
-        uid = call.from_user.id
-        if uid not in user_chats:
-            user_chats[uid] = await create_chat()
-        await call.message.delete()
-        await self.bot.send_message(
-            uid,
-            text=(
-                "👋 **Добро пожаловать в AI-консультант ASIC+!**\n\n"
-                "Задайте любой вопрос по майнинку, оборудованию, доходности.\n\n"
-                "Примеры:\n"
-                "• «Какой ASIC выгодно купить за 3000$?»\n"
-                "• «Какая сейчас прибыль от S19 XP?»\n"
-                "• «Покажи прайс»\n\n"
-                "⏳ Ответ обычно приходит за 3–5 секунд."
-            ),
-            reply_markup=await ClientKB.back_ai(),
+    async def sell_start_handler(self, message: types.Message, state: FSMContext):
+        await message.answer("📱 Введите модель устройства, которое хотите продать:")
+        await state.set_state(SellForm.device)
+
+    async def sell_start_handler_call(
+        self, call: types.CallbackQuery, state: FSMContext
+    ):
+        await call.message.answer(
+            "📱 Введите модель устройства, которое хотите продать:"
         )
-        await state.set_state(FreeAiState.chat)
+        await state.set_state(SellForm.device)
+
+    async def sell_device_handler(self, message: types.Message, state: FSMContext):
+        await state.update_data(device=message.text)
+        await message.answer("💰 Введите цену продажи (в рублях):")
+        await state.set_state(SellForm.price)
+
+    async def sell_price_handler(self, message: types.Message, state: FSMContext):
         try:
-            await call.answer()
-        except TelegramBadRequest:
-            pass
+            price = int(message.text)
+            if price <= 0:
+                raise ValueError
+        except ValueError:
+            await message.answer("❌ Введите корректную цену (число больше нуля):")
+            return
 
-    async def ai_chat_handler(self, message: types.Message, state: FSMContext):
-        uid = message.from_user.id
-        conv_id = user_chats[uid]
-
-        asics = await self.calculator_req.get_all_asic_models()
-        coins = await self.coin_req.get_all_coins()
-
-        context = {
-            "asic_models": [
-                {
-                    "name": a.name,
-                    "manufacturer": a.manufacturer.value,
-                    "algorithm": a.algorithm.value,
-                    "hash_rate": a.hash_rate,
-                    "power": a.power_consumption,
-                    "price": a.price_usd,
-                    "full_info": f"{a.manufacturer.value} {a.name} ({a.algorithm.value}, {a.hash_rate} {'TH/s' if a.hash_rate > 1 else 'GH/s'}, {a.power_consumption}W, ${a.price_usd})",
-                }
-                for a in asics
-            ],
-            "coins": [
-                {
-                    "symbol": c.symbol,
-                    "price": c.current_price_usd,
-                    "name": c.name,
-                    "full_info": f"{c.symbol} ({c.name}): ${c.current_price_usd:.4f}",
-                }
-                for c in coins
-            ],
-        }
-
-        wait_msg = await message.answer(
-            "⏳ **AI анализирует данные…**", parse_mode="Markdown"
+        await state.update_data(price=price)
+        await message.answer(
+            "📝 Опишите состояние устройства (новое/б/у, год покупки и т.д.):"
         )
+        await state.set_state(SellForm.condition)
 
-        answer = await ask_ishushka(conv_id, message.text, context)
-        await self.bot.delete_message(
-            chat_id=message.chat.id, message_id=wait_msg.message_id
+    async def sell_condition_handler(self, message: types.Message, state: FSMContext):
+        await state.update_data(condition=message.text)
+        await message.answer("📋 Добавьте описание (комплектация, особенности и т.д.):")
+        await state.set_state(SellForm.description)
+
+    async def sell_description_handler(self, message: types.Message, state: FSMContext):
+        await state.update_data(description=message.text)
+        await message.answer(
+            "📞 Укажите контакты для связи (телефон, Telegram и т.д.):"
         )
+        await state.set_state(SellForm.contact)
 
-        safe_answer = escape_html(answer)
-        await message.answer(safe_answer, reply_markup=await ClientKB.back_ai())
+    async def sell_contact_handler(self, message: types.Message, state: FSMContext):
+        await state.update_data(contact=message.text)
+        data = await state.get_data()
 
+        # Функция для экранирования HTML-символов
+        def escape_html(text):
+            if not text:
+                return ""
+            return (
+                str(text)
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace('"', "&quot;")
+            )
 
-def escape_html(text: str) -> str:
-    return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-        .replace("'", "&#39;")
-    )
+        try:
+            # Экранируем все пользовательские данные
+            escaped_device = escape_html(data.get("device", ""))
+            escaped_price = escape_html(str(data.get("price", "")))
+            escaped_condition = escape_html(data.get("condition", ""))
+            escaped_description = escape_html(data.get("description", ""))
+            escaped_contact = escape_html(data.get("contact", ""))
+            escaped_username = escape_html(
+                message.from_user.username or message.from_user.first_name
+            )
+
+            await self.bot.send_message(
+                chat_id=ADMIN_ID,
+                text=(
+                    f"📦 <b>Новая заявка на продажу</b>\n\n"
+                    f"👤 От: @{escaped_username}\n"
+                    f"ID: <code>{message.from_user.id}</code>\n\n"
+                    f"📱 <b>Устройство:</b> {escaped_device}\n"
+                    f"💰 <b>Цена:</b> {escaped_price} ₽\n"
+                    f"🔧 <b>Состояние:</b> {escaped_condition}\n"
+                    f"📋 <b>Описание:</b> {escaped_description}\n"
+                    f"📞 <b>Контакты:</b> {escaped_contact}\n\n"
+                    f"С вами скоро свяжется менеджер @vadim_0350."
+                ),
+                parse_mode="HTML",
+            )
+        except Exception as e:
+            print(f"Ошибка при отправке заявки: {e}")
+            await message.answer("❌ Не удалось отправить заявку. Попробуйте позже.")
+            await state.clear()
+            return
+
+        await message.answer(
+            "✅ Спасибо! С вами скоро свяжется менеджер @vadim_0350.", parse_mode=None
+        )
+        await state.clear()

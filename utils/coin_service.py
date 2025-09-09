@@ -73,9 +73,13 @@ class CoinGeckoService:
     async def send_price_notification(self, prices_data: Dict[str, Dict]):
         try:
             coins = await self.coin_req.get_all_coins()
+
+            target_symbols = ["BTC", "ETH", "LTC", "DOGE", "KAS"]
+            filtered_coins = [coin for coin in coins if coin.symbol in target_symbols]
+
             message = "💰 *Обновление цен монет*\n\n"
 
-            for coin in coins:
+            for coin in filtered_coins:
                 if coin.symbol in prices_data:
                     data = prices_data[coin.symbol]
                     change_icon = "📈" if data["price_change"] >= 0 else "📉"
@@ -92,12 +96,31 @@ class CoinGeckoService:
                         await self.bot.send_message(
                             user.uid, message, parse_mode="Markdown"
                         )
+                        await asyncio.sleep(0.1)
                     except Exception as e:
                         logger.error(
                             f"Не удалось отправить уведомление пользователю {user.uid}: {e}"
                         )
+            await self.bot.send_message(-1002725954632, message, parse_mode="Markdown")
+            logger.info(f"Уведомления отправлены {len(users)} пользователям")
+
         except Exception as e:
             logger.error(f"Ошибка при отправке уведомлений: {e}")
+
+    async def get_usd_rub_rate(self) -> float:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{self.base_url}/simple/price",
+                    params={"ids": "tether", "vs_currencies": "rub"},
+                    timeout=10,
+                ) as response:
+                    response.raise_for_status()
+                    data = await response.json()
+                    return data.get("tether", {}).get("rub", 80.0)
+        except Exception as e:
+            logger.error(f"Ошибка при получении курса USD/RUB: {e}")
+            return 80.0
 
     async def initialize_coins(self):
         async with self.db_session_maker() as session:
@@ -120,8 +143,8 @@ class CoinGeckoService:
                         "name": "Ethereum",
                         "coin_gecko_id": "ethereum",
                         "algorithm": "ETCHASH",
-                        "current_price_usd": 2500.0,
-                        "current_price_rub": 200000.0,
+                        "current_price_usd": 4397,
+                        "current_price_rub": 430000.0,
                         "price_change_24h": 0.0,
                     },
                     {

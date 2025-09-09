@@ -1,7 +1,14 @@
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from database.models import Algorithm, AlgorithmData, AsicModel, Coin, Manufacturer
+from database.models import (
+    Algorithm,
+    AlgorithmData,
+    AsicModel,
+    AsicModelLine,
+    Coin,
+    Manufacturer,
+)
 
 
 class AdminKB:
@@ -18,30 +25,47 @@ class AdminKB:
 
     # ---------- ASIC ----------
     @staticmethod
-    async def list_asic(models: list[AsicModel]) -> InlineKeyboardMarkup:
+    async def list_asic_lines(lines: list[AsicModelLine]) -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
-        for m in models:
+        for line in lines:
             builder.button(
-                text=f"{m.name} (${m.price_usd})", callback_data=f"delete_asic:{m.id}"
+                text=f"{line.manufacturer.value} {line.name}",
+                callback_data=f"view_line:{line.id}",
             )
-        builder.button(text="➕ Добавить", callback_data="add_asic")
+        builder.button(text="➕ Добавить ASIC", callback_data="add_asic")
         builder.button(text="🔙 Назад", callback_data="admin_menu")
         builder.adjust(1)
         return builder.as_markup()
 
     @staticmethod
-    async def choose_manufacturer() -> InlineKeyboardMarkup:
+    async def list_asic_models(
+        models: list[AsicModel], line_id: int
+    ) -> InlineKeyboardMarkup:
+        builder = InlineKeyboardBuilder()
+        for model in models:
+            builder.button(
+                text=f"{model.name}", callback_data=f"delete_asic:{model.id}"
+            )
+        builder.button(text="🔙 Назад к линейкам", callback_data="manage_asic")
+        builder.button(text="🗑️ Удалить линейку", callback_data=f"delete_line:{line_id}")
+        builder.adjust(1)
+        return builder.as_markup()
+
+    @staticmethod
+    async def choose_manufacturer_add() -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
         for m in Manufacturer:
-            builder.button(text=m.value, callback_data=f"manufacturer:{m.name}")
+            builder.button(text=m.value, callback_data=f"add_manufacturer:{m.name}")
+        builder.button(text="🔙 Назад", callback_data="manage_asic")
         builder.adjust(2)
         return builder.as_markup()
 
     @staticmethod
-    async def choose_algorithm() -> InlineKeyboardMarkup:
+    async def choose_algorithm_add() -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
         for a in Algorithm:
-            builder.button(text=a.value, callback_data=f"algorithm:{a.name}")
+            builder.button(text=a.value, callback_data=f"add_algorithm:{a.name}")
+        builder.button(text="🔙 Назад", callback_data="add_asic")
         builder.adjust(2)
         return builder.as_markup()
 

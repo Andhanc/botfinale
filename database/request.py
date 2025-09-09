@@ -10,6 +10,7 @@ from database.models import (
     Algorithm,
     AlgorithmData,
     AsicModel,
+    AsicModelLine,
     BroadcastMessage,
     Coin,
     Link,
@@ -95,22 +96,37 @@ class CalculatorReq:
         async with self.lock:
             return list(Manufacturer)
 
-    async def get_asic_models_by_manufacturer(
+    async def get_model_lines_by_manufacturer(
         self, manufacturer: Manufacturer
+    ) -> List[AsicModelLine]:
+        async with self.lock:
+            async with self.db_session_maker() as session:
+                res = await session.execute(
+                    select(AsicModelLine)
+                    .where(AsicModelLine.manufacturer == manufacturer)
+                    .order_by(AsicModelLine.name)
+                )
+                return list(res.scalars().all())
+
+    async def get_asic_models_by_model_line(
+        self, model_line_id: int
     ) -> List[AsicModel]:
         async with self.lock:
             async with self.db_session_maker() as session:
                 res = await session.execute(
                     select(AsicModel)
-                    .where(
-                        and_(
-                            AsicModel.manufacturer == manufacturer,
-                            AsicModel.is_active == True,
-                        )
-                    )
+                    .where(AsicModel.model_line_id == model_line_id)
                     .order_by(AsicModel.name)
                 )
                 return list(res.scalars().all())
+
+    async def get_model_line_by_id(self, model_line_id: int) -> Optional[AsicModelLine]:
+        async with self.lock:
+            async with self.db_session_maker() as session:
+                res = await session.execute(
+                    select(AsicModelLine).where(AsicModelLine.id == model_line_id)
+                )
+                return res.scalar()
 
     async def get_all_asic_models(self) -> List[AsicModel]:
         async with self.lock:
@@ -128,25 +144,40 @@ class CalculatorReq:
                 )
                 return res.scalar()
 
-    async def add_asic_model(
+    async def add_model_line(
         self,
         name: str,
         manufacturer: Manufacturer,
         algorithm: Algorithm,
+    ) -> int:
+        async with self.lock:
+            async with self.db_session_maker() as session:
+                model_line = AsicModelLine(
+                    name=name,
+                    manufacturer=manufacturer,
+                    algorithm=algorithm,
+                )
+                session.add(model_line)
+                await session.flush()
+                model_line_id = model_line.id
+                await session.commit()
+                return model_line_id
+
+    async def add_asic_model(
+        self,
+        name: str,
+        model_line_id: int,
         hash_rate: float,
         power_consumption: float,
-        price_usd: float,
         get_coin: str = "",
     ) -> int:
         async with self.lock:
             async with self.db_session_maker() as session:
                 model = AsicModel(
                     name=name,
-                    manufacturer=manufacturer,
-                    algorithm=algorithm,
+                    model_line_id=model_line_id,
                     hash_rate=hash_rate,
                     power_consumption=power_consumption,
-                    price_usd=price_usd,
                     get_coin=get_coin,
                     is_active=True,
                 )
@@ -155,6 +186,19 @@ class CalculatorReq:
                 model_id = model.id
                 await session.commit()
                 return model_id
+
+    async def delete_model_line(self, model_line_id: int) -> bool:
+        async with self.lock:
+            async with self.db_session_maker() as session:
+                res = await session.execute(
+                    select(AsicModelLine).where(AsicModelLine.id == model_line_id)
+                )
+                model_line = res.scalar()
+                if model_line:
+                    await session.delete(model_line)
+                    await session.commit()
+                    return True
+                return False
 
     async def delete_asic_model(self, model_id: int) -> bool:
         async with self.lock:
@@ -384,46 +428,3 @@ class UsedDeviceGuideReq:
                 session.add(guide)
                 await session.commit()
                 return guide.id
-
-
-class CoinReq:
-    def __init__(self, db_session_maker: async_sessionmaker) -> None:
-        self.db_session_maker = db_session_maker
-        self.lock = Lock()
-
-    async def update_coin_prices(self, prices: Dict[str, Dict]) -> None:
-        async with self.lock:
-            async with self.db_session_maker() as session:
-                for symbol, price_data in prices.items():
-                    res = await session.execute(
-                        select(Coin).where(Coin.symbol == symbol.upper())
-                    )
-                    coin = res.scalar()
-                    if coin:
-                        coin.current_price_usd = price_data.get("price_usd", 0.0)
-                        coin.current_price_rub = price_data.get("price_rub", 0.0)
-                        coin.price_change_24h = price_data.get("price_change", 0.0)
-                        coin.last_updated = datetime.now()
-                await session.commit()
-
-    async def get_all_coins(self) -> List[Coin]:
-        async with self.lock:
-            async with self.db_session_maker() as session:
-                res = await session.execute(select(Coin))
-                return list(res.scalars().all())
-
-    async def get_coin_by_symbol(self, symbol: str) -> Optional[Coin]:
-        async with self.lock:
-            async with self.db_session_maker() as session:
-                res = await session.execute(
-                    select(Coin).where(Coin.symbol == symbol.upper())
-                )
-                return res.scalar()
-
-    async def get_coin_by_gecko_id(self, gecko_id: str) -> Optional[Coin]:
-        async with self.lock:
-            async with self.db_session_maker() as session:
-                res = await session.execute(
-                    select(Coin).where(Coin.coin_gecko_id == gecko_id.lower())
-                )
-                return res.scalar()

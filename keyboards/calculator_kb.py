@@ -28,6 +28,14 @@ class CalculatorKB:
         return builder.as_markup()
 
     @staticmethod
+    async def result_menu() -> InlineKeyboardMarkup:
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🔄 Рассчитать в рублях", callback_data="calc_rub")
+        builder.button(text="🔙 Главное меню", callback_data="back_main")
+        builder.adjust(1)
+        return builder.as_markup()
+
+    @staticmethod
     async def result_menu_rub() -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
         builder.button(text="💵 Рассчитать в долларах", callback_data="calc_usd")
@@ -36,13 +44,73 @@ class CalculatorKB:
         return builder.as_markup()
 
     @staticmethod
-    async def choose_asic_models(models: list) -> InlineKeyboardMarkup:
+    async def choose_model_lines(
+        model_lines: list, page: int = 0, lines_per_page: int = 8
+    ) -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
-        for model in models:
-            builder.button(text=model.name, callback_data=f"calc_model:{model.id}")
+
+        start_idx = page * lines_per_page
+        end_idx = start_idx + lines_per_page
+        paginated_lines = model_lines[start_idx:end_idx]
+
+        for line in paginated_lines:
+            builder.button(text=line.name, callback_data=f"calc_line:{line.id}")
+
+        builder.adjust(1)
+
+        row_buttons = []
+        if page > 0:
+            row_buttons.append(("⬅️ Назад", f"calc_lines_page:{page-1}"))
+
+        if end_idx < len(model_lines):
+            row_buttons.append(("Вперед ➡️", f"calc_lines_page:{page+1}"))
+
+        for text, data in row_buttons:
+            builder.button(text=text, callback_data=data)
+
         builder.button(text="🔙 Назад", callback_data="back_calc_manufacturer")
         builder.button(text="🔙 Главное меню", callback_data="back_main")
+
+        if row_buttons:
+            builder.adjust(1, len(row_buttons), 2)
+        else:
+            builder.adjust(1, 2)
+
+        return builder.as_markup()
+
+    @staticmethod
+    async def choose_asic_models_by_line(
+        models: list, model_line_name: str, page: int = 0, models_per_page: int = 8
+    ) -> InlineKeyboardMarkup:
+        builder = InlineKeyboardBuilder()
+
+        start_idx = page * models_per_page
+        end_idx = start_idx + models_per_page
+        paginated_models = models[start_idx:end_idx]
+
+        for model in paginated_models:
+            builder.button(text=model.name, callback_data=f"calc_model:{model.id}")
+
         builder.adjust(1)
+
+        row_buttons = []
+        if page > 0:
+            row_buttons.append(("⬅️ Назад", f"calc_models_page:{page-1}"))
+
+        if end_idx < len(models):
+            row_buttons.append(("Вперед ➡️", f"calc_models_page:{page+1}"))
+
+        for text, data in row_buttons:
+            builder.button(text=text, callback_data=data)
+
+        builder.button(text="🔙 Назад", callback_data=f"back_calc_line")
+        builder.button(text="🔙 Главное меню", callback_data="back_main")
+
+        if row_buttons:
+            builder.adjust(1, len(row_buttons), 2)
+        else:
+            builder.adjust(1, 2)
+
         return builder.as_markup()
 
     @staticmethod
@@ -83,14 +151,6 @@ class CalculatorKB:
     async def power_input() -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
         builder.button(text="🔙 Назад", callback_data="back_calc_hashrate")
-        builder.button(text="🔙 Главное меню", callback_data="back_main")
-        builder.adjust(1)
-        return builder.as_markup()
-
-    @staticmethod
-    async def result_menu() -> InlineKeyboardMarkup:
-        builder = InlineKeyboardBuilder()
-        builder.button(text="🔄 Рассчитать в рублях", callback_data="calc_rub")
         builder.button(text="🔙 Главное меню", callback_data="back_main")
         builder.adjust(1)
         return builder.as_markup()

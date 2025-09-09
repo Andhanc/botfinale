@@ -18,13 +18,14 @@ class ClientKB:
     @staticmethod
     async def main_menu() -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
-        builder.button(text="💰 Рассчитать доходность", callback_data="calc_income")
-        builder.button(text="📋 Прайс-лист", callback_data="price_list")
-        builder.button(text="👤 Профиль", callback_data="profile")
+        builder.button(text="🧮 Калькулятор", callback_data="calc_income")
         builder.button(text="🤖 AI-консультант", callback_data="ai_consult")
-        builder.button(
-            text="📞 Связаться с менеджером", url="https://t.me/your_manager"
-        )
+        builder.button(text="📋 Прайс-лист", callback_data="price_list")
+        builder.button(text="🛠️ Ремонт ASIC+", callback_data="document")
+
+        builder.button(text="📞 Связаться с менеджером", url="https://t.me/vadim_0350")
+        builder.button(text="👤 Профиль", callback_data="profile")
+
         builder.adjust(1)
         return builder.as_markup()
 
@@ -47,34 +48,53 @@ class ClientKB:
         return builder.as_markup()
 
     @staticmethod
-    async def profile_menu(notifications_enabled: bool = True) -> InlineKeyboardMarkup:
+    async def profile_menu() -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
-        status_text = (
-            "🔔 Уведомления выкл" if notifications_enabled else "🔔 Уведомления вкл"
-        )
-        builder.button(text=status_text, callback_data="notify_toggle")
+        builder.button(text="💰 Хочу другую цену", callback_data="better_price")
+        builder.button(text="📦 Продать оборудование", callback_data="sell_device")
         builder.button(text="📢 Перейти в канал", url="https://t.me/asic_plus")
-        builder.button(text="💸 Хочу другую цену", callback_data="better_price")
+        builder.button(text="📞 Связаться с менеджером", url="https://t.me/vadim_0350")
         builder.button(text="🔙 Назад", callback_data="back_main")
         builder.adjust(1)
         return builder.as_markup()
 
     @staticmethod
-    async def devices_pagination(
-        current_page: int, total_pages: int
-    ) -> InlineKeyboardMarkup:
+    async def chars_manufacturer() -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
-
-        if current_page > 0:
-            builder.button(
-                text="⬅️ Назад", callback_data=f"devices_page:{current_page - 1}"
-            )
-
-        if current_page < total_pages - 1:
-            builder.button(
-                text="Вперёд ➡️", callback_data=f"devices_page:{current_page + 1}"
-            )
-
-        builder.button(text="🔙 Назад в меню", callback_data="calc_income")
+        builder.button(text="Bitmain", callback_data="chars_manufacturer:Bitmain")
+        builder.button(text="Whatsminer", callback_data="chars_manufacturer:Whatsminer")
+        builder.button(text="Ice River", callback_data="chars_manufacturer:Ice River")
+        builder.button(text="Goldshell", callback_data="chars_manufacturer:Goldshell")
+        builder.button(text="iPollo", callback_data="chars_manufacturer:iPollo")
+        builder.button(text="🔙 Назад", callback_data="calc_income")
+        builder.button(text="🔙 Главное меню", callback_data="back_main")
         builder.adjust(2)
+        return builder.as_markup()
+
+    @staticmethod
+    async def chars_model_lines(model_lines: list) -> InlineKeyboardMarkup:
+        builder = InlineKeyboardBuilder()
+        for line in model_lines:
+            builder.button(text=line.name, callback_data=f"chars_line:{line.id}")
+        builder.button(text="🔙 Назад", callback_data="calc_chars")
+        builder.button(text="🔙 Главное меню", callback_data="back_main")
+        builder.adjust(1)
+        return builder.as_markup()
+
+    @staticmethod
+    async def chars_models(models: list) -> InlineKeyboardMarkup:
+        builder = InlineKeyboardBuilder()
+        for model in models:
+            builder.button(text=model.name, callback_data=f"chars_model:{model.id}")
+        builder.button(text="🔙 Назад к линейкам", callback_data="back_chars_lines")
+        builder.button(text="🔙 Главное меню", callback_data="back_main")
+        builder.adjust(1)
+        return builder.as_markup()
+
+    @staticmethod
+    async def chars_back() -> InlineKeyboardMarkup:
+        builder = InlineKeyboardBuilder()
+        builder.button(text="🔙 Назад к моделям", callback_data="back_chars_models")
+        builder.button(text="🔙 Главное меню", callback_data="back_main")
+        builder.adjust(1)
         return builder.as_markup()
