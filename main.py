@@ -31,7 +31,7 @@ class BotRunner:
 
     def setup_scheduler(self):
         moscow_tz = pytz.timezone("Europe/Moscow")
-        trigger = CronTrigger(hour=10, minute=0, timezone=moscow_tz)
+        trigger = CronTrigger(hour=12, minute=0, timezone=moscow_tz)
         self.scheduler.add_job(
             self.coin_service.update_coin_prices_and_notify,
             trigger,
@@ -46,7 +46,7 @@ class BotRunner:
     async def run(self):
         await self.setup()
         self.scheduler.start()
-        print("Планировщик запущен. Цены будут обновляться ежедневно в 10:00 по Москве")
+        print("Планировщик запущен. Цены будут обновляться ежедневно в 12:00 по Москве")
         try:
             await self.bot_instance.dp.start_polling(self.bot_instance.bot)
         finally:

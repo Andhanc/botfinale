@@ -75,9 +75,16 @@ class CoinGeckoService:
             coins = await self.coin_req.get_all_coins()
 
             target_symbols = ["BTC", "ETH", "LTC", "DOGE", "KAS"]
-            filtered_coins = [coin for coin in coins if coin.symbol in target_symbols]
 
-            message = "💰 *Обновление цен монет*\n\n"
+            # Жёстко сохраняем порядок
+            filtered_coins = [
+                coin
+                for symbol in target_symbols
+                for coin in coins
+                if coin.symbol == symbol
+            ]
+
+            message = ""
 
             for coin in filtered_coins:
                 if coin.symbol in prices_data:
@@ -101,6 +108,8 @@ class CoinGeckoService:
                         logger.error(
                             f"Не удалось отправить уведомление пользователю {user.uid}: {e}"
                         )
+
+            # Отправка в канал
             await self.bot.send_message(-1001546174824, message, parse_mode="Markdown")
             logger.info(f"Уведомления отправлены {len(users)} пользователям")
 
