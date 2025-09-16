@@ -3,7 +3,6 @@ from typing import Any, Dict
 
 from aiogram import F, types
 from aiogram.enums import ContentType
-from aiogram.enums.parse_mode import ParseMode
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, Filter
 from aiogram.fsm.context import FSMContext

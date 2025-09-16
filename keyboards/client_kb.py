@@ -76,6 +76,7 @@ class ClientKB:
         builder = InlineKeyboardBuilder()
         for line in model_lines:
             builder.button(text=line.name, callback_data=f"chars_line:{line.id}")
+            builder.adjust(1)
         builder.button(text="🔙 Назад", callback_data="calc_chars")
         builder.button(text="🔙 Главное меню", callback_data="back_main")
         builder.adjust(1)
@@ -86,6 +87,7 @@ class ClientKB:
         builder = InlineKeyboardBuilder()
         for model in models:
             builder.button(text=model.name, callback_data=f"chars_model:{model.id}")
+            builder.adjust(1)
         builder.button(text="🔙 Назад к линейкам", callback_data="back_chars_lines")
         builder.button(text="🔙 Главное меню", callback_data="back_main")
         builder.adjust(1)

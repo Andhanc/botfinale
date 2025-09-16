@@ -22,6 +22,7 @@ class CalculatorKB:
                 text=manufacturer.value,
                 callback_data=f"calc_manufacturer:{manufacturer.value}",
             )
+        builder.adjust(1)
         builder.button(text="🔙 Назад", callback_data="back_calc_method")
         builder.button(text="🔙 Главное меню", callback_data="back_main")
         builder.adjust(1)
@@ -120,6 +121,7 @@ class CalculatorKB:
             builder.button(
                 text=algorithm.value, callback_data=f"calc_algorithm:{algorithm.value}"
             )
+        builder.adjust(1)
         builder.button(text="🔙 Назад", callback_data="back_calc_method")
         builder.button(text="🔙 Главное меню", callback_data="back_main")
         builder.adjust(1)
