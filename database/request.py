@@ -1,3 +1,4 @@
+import re
 from asyncio import Lock
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -102,11 +103,20 @@ class CalculatorReq:
         async with self.lock:
             async with self.db_session_maker() as session:
                 res = await session.execute(
-                    select(AsicModelLine)
-                    .where(AsicModelLine.manufacturer == manufacturer)
-                    .order_by(AsicModelLine.name)
+                    select(AsicModelLine).where(
+                        AsicModelLine.manufacturer == manufacturer
+                    )
                 )
-                return list(res.scalars().all())
+                lines = list(res.scalars().all())
+
+                def natural_sort_key(text):
+                    return [
+                        int(part) if part.isdigit() else part.lower()
+                        for part in re.split(r"(\d+)", text)
+                    ]
+
+                lines.sort(key=lambda x: natural_sort_key(x.name))
+                return lines
 
     async def get_asic_models_by_model_line(
         self, model_line_id: int

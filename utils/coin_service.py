@@ -96,22 +96,22 @@ class CoinGeckoService:
                         f"   {change_icon} {data['price_change']:+.1f}%\n\n"
                     )
 
-            users = await self.user_req.get_all_users()
-            for user in users:
-                if user.notifications:
-                    try:
-                        await self.bot.send_message(
-                            user.uid, message, parse_mode="Markdown"
-                        )
-                        await asyncio.sleep(0.1)
-                    except Exception as e:
-                        logger.error(
-                            f"Не удалось отправить уведомление пользователю {user.uid}: {e}"
-                        )
+            # users = await self.user_req.get_all_users()
+            # for user in users:
+            #     if user.notifications:
+            #         try:
+            #             await self.bot.send_message(
+            #                 user.uid, message, parse_mode="Markdown"
+            #             )
+            #             await asyncio.sleep(0.1)
+            #         except Exception as e:
+            #             logger.error(
+            #                 f"Не удалось отправить уведомление пользователю {user.uid}: {e}"
+            #             )
 
-            # Отправка в канал
-            await self.bot.send_message(-1001546174824, message, parse_mode="Markdown")
-            logger.info(f"Уведомления отправлены {len(users)} пользователям")
+            # # Отправка в канал
+            # await self.bot.send_message(-1001546174824, message, parse_mode="Markdown")
+            # logger.info(f"Уведомления отправлены {len(users)} пользователям")
 
         except Exception as e:
             logger.error(f"Ошибка при отправке уведомлений: {e}")

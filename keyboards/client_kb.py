@@ -74,8 +74,22 @@ class ClientKB:
     @staticmethod
     async def chars_model_lines(model_lines: list) -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
-        for line in model_lines:
+
+        # Создаем функцию для естественной сортировки
+        def natural_sort_key(text):
+            import re
+
+            return [
+                int(part) if part.isdigit() else part.lower()
+                for part in re.split(r"(\d+)", text.name)
+            ]
+
+        # Сортируем модели перед созданием кнопок
+        sorted_lines = sorted(model_lines, key=natural_sort_key)
+
+        for line in sorted_lines:
             builder.button(text=line.name, callback_data=f"chars_line:{line.id}")
+
         builder.button(text="🔙 Назад", callback_data="calc_chars")
         builder.button(text="🔙 Главное меню", callback_data="back_main")
         builder.adjust(1)
