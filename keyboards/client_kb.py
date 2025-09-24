@@ -88,7 +88,9 @@ class ClientKB:
         sorted_lines = sorted(model_lines, key=natural_sort_key)
 
         for line in sorted_lines:
-            builder.button(text=line.name, callback_data=f"chars_line:{line.id}")
+            builder.button(
+                text=f"Модель {line.name}", callback_data=f"chars_line:{line.id}"
+            )
 
         builder.button(text="🔙 Назад", callback_data="calc_chars")
         builder.button(text="🔙 Главное меню", callback_data="back_main")

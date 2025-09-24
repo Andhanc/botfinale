@@ -118,7 +118,7 @@ class Client:
         self.dp.message(CalculatorState.input_electricity_price)(
             self.calc_electricity_handler
         )
-        self.dp.message(CalculatorState.input_hashrate)(self.calc_hashrate_handler)
+        self.dp.message(CalculatorState.input_hashrate)(self.calc_electricity_handler)
         self.dp.message(CalculatorState.input_power)(self.calc_power_handler)
 
         self.dp.message(SellForm.device)(self.sell_device_handler)
@@ -799,20 +799,56 @@ class Client:
             model_line = await self.calculator_req.get_model_line_by_id(
                 model.model_line_id
             )
-            algorithm_data = await self.calculator_req.get_algorithm_data(
-                model_line.algorithm
-            )
-            coin = await self.calculator_req.get_coin_by_symbol(
-                algorithm_data.default_coin
-            )
+
+            # Собираем данные для каждой монеты
+            coin_data = {}
+            coin_symbols = []
+
+            if model.get_coin and model.get_coin.strip():
+                # Разделяем монеты по запятой
+                raw_coins = model.get_coin.split(",")
+                for coin_str in raw_coins:
+                    coin_symbol = coin_str.strip().upper()
+                    coin = await self.calculator_req.get_coin_by_symbol(coin_symbol)
+                    if coin:
+                        # Для каждой монеты получаем свои параметры алгоритма
+                        coin_algorithm_data = (
+                            await self.calculator_req.get_algorithm_data(coin.algorithm)
+                        )
+                        if coin_algorithm_data:
+                            coin_data[coin_symbol] = {
+                                "price": coin.current_price_usd,
+                                "network_hashrate": coin_algorithm_data.network_hashrate,
+                                "block_reward": coin_algorithm_data.block_reward,
+                                "algorithm": coin.algorithm.value.lower(),  # Преобразуем в строку
+                            }
+                            coin_symbols.append(coin_symbol)
+            else:
+                # Если монеты не указаны, используем алгоритм оборудования
+                algorithm_data = await self.calculator_req.get_algorithm_data(
+                    model_line.algorithm
+                )
+                coin = await self.calculator_req.get_coin_by_symbol(
+                    algorithm_data.default_coin
+                )
+                if coin and algorithm_data:
+                    coin_data[coin.symbol] = {
+                        "price": coin.current_price_usd,
+                        "network_hashrate": algorithm_data.network_hashrate,
+                        "block_reward": algorithm_data.block_reward,
+                        "algorithm": model_line.algorithm.value.lower(),
+                    }
+                    coin_symbols.append(coin.symbol)
+
+            if not coin_symbols:
+                await message.answer("❌ Не удалось найти данные о монетах")
+                return
 
             result = MiningCalculator.calculate_profitability(
-                hash_rate_ths=model.hash_rate,
+                hash_rate=model.hash_rate,
                 power_consumption=model.power_consumption,
                 electricity_price_rub=electricity_price,
-                coin_price_usd=coin.current_price_usd,
-                network_hashrate_ths=algorithm_data.network_hashrate,
-                block_reward=algorithm_data.block_reward,
+                coin_data=coin_data,  # Передаем данные по всем монетам
                 usd_to_rub=usd_to_rub,
             )
 
@@ -821,10 +857,18 @@ class Client:
             )
             text += f"⚡ **Хэшрейт:** {model.hash_rate} TH/s\n"
             text += f"🔌 **Потребление:** {model.power_consumption}W\n\n"
-            # ИЗМЕНЕНИЕ: сначала показываем в долларах
-            text += MiningCalculator.format_result(result, coin.symbol, usd_to_rub)
+
+            text += MiningCalculator.format_result(
+                result,
+                coin_symbols,
+                usd_to_rub,
+                equipment_name=f"{model_line.manufacturer.value} {model.name}",
+                hash_rate=model.hash_rate,
+                power_consumption=model.power_consumption,
+            )
 
         else:
+            # Аналогичные исправления для метода "hashrate"
             algorithm = data["algorithm"]
             hashrate = data["hashrate"]
             power = data["power"]
@@ -834,44 +878,29 @@ class Client:
                 algorithm_data.default_coin
             )
 
+            algorithm_type = "scrypt" if algorithm == Algorithm.SCRYPT else "sha256"
+
+            # Для метода hashrate используем одну монету
             result = MiningCalculator.calculate_profitability(
-                hash_rate_ths=hashrate,
+                hash_rate=hashrate,
                 power_consumption=power,
                 electricity_price_rub=electricity_price,
-                coin_price_usd=coin.current_price_usd,
-                network_hashrate_ths=algorithm_data.network_hashrate,
+                coin_prices_usd={coin.symbol: coin.current_price_usd},
+                network_hashrate=algorithm_data.network_hashrate,
                 block_reward=algorithm_data.block_reward,
                 usd_to_rub=usd_to_rub,
+                algorithm=algorithm_type,
             )
 
             text = f"⚙️ **Алгоритм:** {algorithm.value}\n"
             text += f"⚡ **Хэшрейт:** {hashrate} TH/s\n"
             text += f"🔌 **Мощность:** {power}W\n\n"
-            # ИЗМЕНЕНИЕ: сначала показываем в долларах
-            text += MiningCalculator.format_result(result, coin.symbol, usd_to_rub)
+            text += MiningCalculator.format_result(
+                result, [coin.symbol], usd_to_rub  # Список с одной монетой
+            )
 
-        # ИЗМЕНЕНИЕ: используем меню для долларов
         await message.answer(text, reply_markup=await CalculatorKB.result_menu())
         await state.set_state(CalculatorState.show_result)
-
-    async def calc_hashrate_handler(self, message: types.Message, state: FSMContext):
-        try:
-            hashrate = float(message.text.replace(",", "."))
-            if hashrate <= 0:
-                raise ValueError
-        except ValueError:
-            await message.answer(
-                "❌ Неверный формат. Введите число больше нуля:",
-                reply_markup=await CalculatorKB.hashrate_input(),
-            )
-            return
-
-        await state.update_data(hashrate=hashrate)
-        await message.answer(
-            "🔌 Введите потребляемую мощность (W):",
-            reply_markup=await CalculatorKB.power_input(),
-        )
-        await state.set_state(CalculatorState.input_power)
 
     async def calc_power_handler(self, message: types.Message, state: FSMContext):
         try:
@@ -917,7 +946,7 @@ class Client:
             )
 
             result = MiningCalculator.calculate_profitability(
-                hash_rate_ths=model.hash_rate,
+                hash_rate=model.hash_rate,
                 power_consumption=model.power_consumption,
                 electricity_price_rub=electricity_price,
                 coin_price_usd=coin.current_price_usd,
@@ -926,13 +955,8 @@ class Client:
                 usd_to_rub=usd_to_rub,
             )
 
-            text = (
-                f"🔧 **Оборудование:** {model_line.manufacturer.value} {model.name}\n"
-            )
-            text += f"⚡ **Хэшрейт:** {model.hash_rate} TH/s\n"
-            text += f"🔌 **Потребление:** {model.power_consumption}W\n\n"
             # Возвращаем к долларовому формату
-            text += MiningCalculator.format_result(result, coin.symbol, usd_to_rub)
+            text = MiningCalculator.format_result(result, coin.symbol, usd_to_rub)
 
         else:
             algorithm = data["algorithm"]
@@ -945,7 +969,7 @@ class Client:
             )
 
             result = MiningCalculator.calculate_profitability(
-                hash_rate_ths=hashrate,
+                hash_rate=hashrate,
                 power_consumption=power,
                 electricity_price_rub=electricity_price,
                 coin_price_usd=coin.current_price_usd,
@@ -1009,7 +1033,7 @@ class Client:
             )
 
             result = MiningCalculator.calculate_profitability(
-                hash_rate_ths=model.hash_rate,
+                hash_rate=model.hash_rate,
                 power_consumption=model.power_consumption,
                 electricity_price_rub=electricity_price,
                 coin_price_usd=coin.current_price_usd,
@@ -1018,13 +1042,8 @@ class Client:
                 usd_to_rub=usd_to_rub,
             )
 
-            text = (
-                f"🔧 **Оборудование:** {model_line.manufacturer.value} {model.name}\n"
-            )
-            text += f"⚡ **Хэшрейт:** {model.hash_rate} TH/s\n"
-            text += f"🔌 **Потребление:** {model.power_consumption}W\n\n"
             # Показываем в рублях
-            text += MiningCalculator.format_result_rub(result, coin.symbol, usd_to_rub)
+            text = MiningCalculator.format_result_rub(result, coin.symbol, usd_to_rub)
 
         else:
             algorithm = data["algorithm"]
@@ -1037,7 +1056,7 @@ class Client:
             )
 
             result = MiningCalculator.calculate_profitability(
-                hash_rate_ths=hashrate,
+                hash_rate=hashrate,
                 power_consumption=power,
                 electricity_price_rub=electricity_price,
                 coin_price_usd=coin.current_price_usd,

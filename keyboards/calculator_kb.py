@@ -54,7 +54,9 @@ class CalculatorKB:
         paginated_lines = model_lines[start_idx:end_idx]
 
         for line in paginated_lines:
-            builder.button(text=line.name, callback_data=f"calc_line:{line.id}")
+            builder.button(
+                text=f"Модель {line.name}", callback_data=f"calc_line:{line.id}"
+            )
 
         if page > 0:
             builder.button(text="⬅️ Назад", callback_data=f"calc_lines_page:{page-1}")
