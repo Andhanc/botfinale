@@ -18,6 +18,7 @@ class CoinGeckoService:
         self.coin_req = CoinReq(settings.db_manager.async_session)
         self.user_req = UserReq(settings.db_manager.async_session)
         self.base_url = "https://api.coingecko.com/api/v3"
+        # Расширенный маппинг всех монет, поддерживаемых ботом
         self.coin_mapping = {
             "BTC": "bitcoin",
             "ETH": "ethereum",
@@ -25,10 +26,16 @@ class CoinGeckoService:
             "DOGE": "dogecoin",
             "LTC": "litecoin",
             "KAS": "kaspa",
+            "BCH": "bitcoin-cash",
+            "BSV": "bitcoin-sv",
+            "ETC": "ethereum-classic",
+            "KDA": "kadena",
+            "ETHW": "ethereum-pow-iou",
         }
         self.bot = settings.bot
 
     async def fetch_prices(self) -> Dict[str, Dict]:
+        """Получение цен всех монет из CoinGecko API"""
         try:
             coin_ids = ",".join(self.coin_mapping.values())
             async with aiohttp.ClientSession() as session:
@@ -42,7 +49,12 @@ class CoinGeckoService:
                     timeout=30,
                 ) as response:
                     response.raise_for_status()
-                    return await response.json()
+                    data = await response.json()
+                    logger.info(f"Получены цены для {len(data)} монет из CoinGecko")
+                    return data
+        except aiohttp.ClientError as e:
+            logger.error(f"Ошибка сети при получении цен с CoinGecko: {e}")
+            return {}
         except Exception as e:
             logger.error(f"Ошибка при получении цен с CoinGecko: {e}")
             return {}
@@ -132,60 +144,59 @@ class CoinGeckoService:
             return 80.0
 
     async def initialize_coins(self):
+        """Инициализация монет с получением актуальных цен из API"""
         async with self.db_session_maker() as session:
             from sqlalchemy import select
+            from database.models import Algorithm
 
             existing_coins = await session.execute(select(Coin))
             if not existing_coins.scalars().first():
+                # Список монет для инициализации
                 coins_to_add = [
-                    {
-                        "symbol": "BTC",
-                        "name": "Bitcoin",
-                        "coin_gecko_id": "bitcoin",
-                        "algorithm": "SHA256",
-                        "current_price_usd": 45000.0,
-                        "current_price_rub": 3600000.0,
-                        "price_change_24h": 0.0,
-                    },
-                    {
-                        "symbol": "ETH",
-                        "name": "Ethereum",
-                        "coin_gecko_id": "ethereum",
-                        "algorithm": "ETCHASH",
-                        "current_price_usd": 4397,
-                        "current_price_rub": 430000.0,
-                        "price_change_24h": 0.0,
-                    },
-                    {
-                        "symbol": "KAS",
-                        "name": "Kaspa",
-                        "coin_gecko_id": "kaspa",
-                        "algorithm": "KHEAVYHASH",
-                        "current_price_usd": 0.087,
-                        "current_price_rub": 7.0,
-                        "price_change_24h": 0.0,
-                    },
-                    {
-                        "symbol": "LTC",
-                        "name": "Litecoin",
-                        "coin_gecko_id": "litecoin",
-                        "algorithm": "SCRYPT",
-                        "current_price_usd": 75.0,
-                        "current_price_rub": 6000.0,
-                        "price_change_24h": 0.0,
-                    },
-                    {
-                        "symbol": "DOGE",
-                        "name": "Dogecoin",
-                        "coin_gecko_id": "dogecoin",
-                        "algorithm": "SCRYPT",
-                        "current_price_usd": 0.15,
-                        "current_price_rub": 12.0,
-                        "price_change_24h": 0.0,
-                    },
+                    {"symbol": "BTC", "name": "Bitcoin", "coin_gecko_id": "bitcoin", "algorithm": Algorithm.SHA256},
+                    {"symbol": "ETH", "name": "Ethereum", "coin_gecko_id": "ethereum", "algorithm": Algorithm.ETCHASH},
+                    {"symbol": "LTC", "name": "Litecoin", "coin_gecko_id": "litecoin", "algorithm": Algorithm.SCRYPT},
+                    {"symbol": "DOGE", "name": "Dogecoin", "coin_gecko_id": "dogecoin", "algorithm": Algorithm.SCRYPT},
+                    {"symbol": "KAS", "name": "Kaspa", "coin_gecko_id": "kaspa", "algorithm": Algorithm.KHEAVYHASH},
+                    {"symbol": "BCH", "name": "Bitcoin Cash", "coin_gecko_id": "bitcoin-cash", "algorithm": Algorithm.SHA256},
+                    {"symbol": "BSV", "name": "Bitcoin SV", "coin_gecko_id": "bitcoin-sv", "algorithm": Algorithm.SHA256},
+                    {"symbol": "ETC", "name": "Ethereum Classic", "coin_gecko_id": "ethereum-classic", "algorithm": Algorithm.ETCHASH},
+                    {"symbol": "KDA", "name": "Kadena", "coin_gecko_id": "kadena", "algorithm": Algorithm.BLAKE2S},
+                    {"symbol": "ETHW", "name": "Ethereum PoW", "coin_gecko_id": "ethereum-pow-iou", "algorithm": Algorithm.ETCHASH},
                 ]
+                
+                # Получаем актуальные цены из API
+                logger.info("Получение актуальных цен монет из CoinGecko API...")
+                prices = await self.fetch_prices()
+                
+                # Создаем монеты с актуальными ценами или значениями по умолчанию
                 for coin_data in coins_to_add:
+                    symbol = coin_data["symbol"]
+                    coin_gecko_id = coin_data["coin_gecko_id"]
+                    
+                    # Получаем цену из API, если доступна
+                    if prices and coin_gecko_id in prices:
+                        price_data = prices[coin_gecko_id]
+                        coin_data["current_price_usd"] = price_data.get("usd", 0.0)
+                        coin_data["current_price_rub"] = price_data.get("rub", 0.0)
+                        coin_data["price_change_24h"] = price_data.get("usd_24h_change", 0.0)
+                        logger.info(f"Получена цена для {symbol}: ${coin_data['current_price_usd']:,.2f}")
+                    else:
+                        # Значения по умолчанию, если API недоступен
+                        coin_data["current_price_usd"] = 0.0
+                        coin_data["current_price_rub"] = 0.0
+                        coin_data["price_change_24h"] = 0.0
+                        logger.warning(f"Не удалось получить цену для {symbol}, используются значения по умолчанию")
+                    
                     coin = Coin(**coin_data)
                     session.add(coin)
+                
                 await session.commit()
-                logger.info("Монеты инициализированы")
+                logger.info(f"Монеты инициализированы с актуальными ценами из API")
+                
+                # Обновляем цены сразу после инициализации
+                await self.update_coin_prices_and_notify()
+            else:
+                logger.info("Монеты уже существуют, обновляем цены...")
+                # Обновляем цены для существующих монет
+                await self.update_coin_prices_and_notify()

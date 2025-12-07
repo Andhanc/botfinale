@@ -184,7 +184,7 @@ class CreateDatabase:
                                 algorithm=Algorithm.SHA256,
                                 default_coin="BTC",
                                 difficulty=85_000_000_000_000_000,
-                                network_hashrate=650_000_000,
+                                network_hashrate=1_068_844_948,  # TH/s (≈ 1,068,845 PH/s) - актуальное значение для BTC
                                 block_reward=3.125,
                             ),
                             AlgorithmData(
@@ -198,14 +198,14 @@ class CreateDatabase:
                                 algorithm=Algorithm.ETCHASH,
                                 default_coin="ETC",
                                 difficulty=50_000_000_000_000,
-                                network_hashrate=50_000_000,
+                                network_hashrate=387_376_804,  # MH/s (≈ 387,377 GH/s = 387 TH/s) - актуальное значение для ETC
                                 block_reward=2.56,
                             ),
                             AlgorithmData(
                                 algorithm=Algorithm.SCRYPT,
                                 default_coin="LTC",
                                 difficulty=15_000_000,
-                                network_hashrate=600_000,
+                                network_hashrate=3_464_270,  # GH/s (≈ 3,464 TH/s) - актуальное значение для LTC
                                 block_reward=6.25,
                             ),
                             AlgorithmData(
@@ -237,6 +237,8 @@ class CreateDatabase:
                 coins_exist = await session.execute(select(Coin))
                 if not coins_exist.scalars().first():
                     print("📝 Добавляем начальные данные в coins...")
+                    print("ℹ️ Цены будут получены из CoinGecko API при инициализации")
+                    # Монеты создаются без цен, цены будут получены из API через CoinGeckoService
                     session.add_all(
                         [
                             Coin(
@@ -244,85 +246,85 @@ class CreateDatabase:
                                 name="Bitcoin",
                                 coin_gecko_id="bitcoin",
                                 algorithm=Algorithm.SHA256,
-                                current_price_usd=110850.0,
-                                current_price_rub=8743406.0,
+                                current_price_usd=0.0,  # Будет обновлено из API
+                                current_price_rub=0.0,
                             ),
                             Coin(
                                 symbol="ETH",
                                 name="Ethereum",
                                 coin_gecko_id="ethereum",
                                 algorithm=Algorithm.ETCHASH,
-                                current_price_usd=3995.6,
-                                current_price_rub=315156.0,
+                                current_price_usd=0.0,
+                                current_price_rub=0.0,
                             ),
                             Coin(
                                 symbol="LTC",
                                 name="Litecoin",
                                 coin_gecko_id="litecoin",
                                 algorithm=Algorithm.SCRYPT,
-                                current_price_usd=94.23,
-                                current_price_rub=7433.0,
+                                current_price_usd=0.0,
+                                current_price_rub=0.0,
                             ),
                             Coin(
                                 symbol="DOGE",
                                 name="Dogecoin",
                                 coin_gecko_id="dogecoin",
                                 algorithm=Algorithm.SCRYPT,
-                                current_price_usd=0.20,
-                                current_price_rub=15.0,
+                                current_price_usd=0.0,
+                                current_price_rub=0.0,
                             ),
                             Coin(
                                 symbol="KAS",
                                 name="Kaspa",
                                 coin_gecko_id="kaspa",
                                 algorithm=Algorithm.KHEAVYHASH,
-                                current_price_usd=0.06,
-                                current_price_rub=5.0,
+                                current_price_usd=0.0,
+                                current_price_rub=0.0,
                             ),
                             Coin(
                                 symbol="BCH",
                                 name="Bitcoin Cash",
                                 coin_gecko_id="bitcoin-cash",
                                 algorithm=Algorithm.SHA256,
-                                current_price_usd=350.0,
-                                current_price_rub=31500.0,
+                                current_price_usd=0.0,
+                                current_price_rub=0.0,
                             ),
                             Coin(
                                 symbol="BSV",
                                 name="Bitcoin SV",
                                 coin_gecko_id="bitcoin-sv",
                                 algorithm=Algorithm.SHA256,
-                                current_price_usd=45.0,
-                                current_price_rub=4050.0,
+                                current_price_usd=0.0,
+                                current_price_rub=0.0,
                             ),
                             Coin(
                                 symbol="ETC",
                                 name="Ethereum Classic",
                                 coin_gecko_id="ethereum-classic",
                                 algorithm=Algorithm.ETCHASH,
-                                current_price_usd=21.67,
-                                current_price_rub=1950.0,
+                                current_price_usd=0.0,
+                                current_price_rub=0.0,
                             ),
                             Coin(
                                 symbol="KDA",
                                 name="Kadena",
                                 coin_gecko_id="kadena",
                                 algorithm=Algorithm.BLAKE2S,
-                                current_price_usd=0.85,
-                                current_price_rub=76.0,
+                                current_price_usd=0.0,
+                                current_price_rub=0.0,
                             ),
                             Coin(
                                 symbol="ETHW",
                                 name="Ethereum PoW",
                                 coin_gecko_id="ethereum-pow-iou",
                                 algorithm=Algorithm.ETCHASH,
-                                current_price_usd=2.50,
-                                current_price_rub=225.0,
+                                current_price_usd=0.0,
+                                current_price_rub=0.0,
                             ),
                         ]
                     )
                     await session.commit()
-                    print("✅ Начальные данные coins добавлены")
+                    print("✅ Начальные данные coins добавлены (цены будут обновлены из API)")
                 else:
                     print("ℹ️ Данные в coins уже существуют")
                     

@@ -757,8 +757,25 @@ class Client:
         algorithm_name = call.data.split(":")[1]
         algorithm = Algorithm(algorithm_name)
         await state.update_data(algorithm=algorithm)
+        
+        # Определяем единицы измерения хэшрейта для каждого алгоритма
+        algorithm_lower = algorithm_name.lower()
+        # В базе данных ETCHASH определен как "Etchash/Ethash"
+        if algorithm_lower in ["sha-256", "sha256"]:
+            hashrate_unit = "TH/s"
+        elif algorithm_lower in ["scrypt"]:
+            hashrate_unit = "GH/s"
+        elif algorithm_lower in ["etchash", "ethash", "etchash/ethash"]:
+            hashrate_unit = "GH/s"  # Для Etchash вводим в GH/s
+        elif algorithm_lower in ["kheavyhash"]:
+            hashrate_unit = "GH/s"
+        elif algorithm_lower in ["blake2s", "blake2b+sha3", "blake2b_sha3"]:
+            hashrate_unit = "GH/s"
+        else:
+            hashrate_unit = "TH/s"  # По умолчанию
+        
         await call.message.edit_text(
-            "⚡ Введите ваш хешрейт (TH/s):",
+            f"⚡ Введите ваш хешрейт ({hashrate_unit}):",
             reply_markup=await CalculatorKB.hashrate_input(),
         )
         await state.set_state(CalculatorState.input_hashrate)
@@ -853,6 +870,16 @@ class Client:
             algo_data = await self.calculator_req.get_algorithm_data(algorithm)
             coin = await self.calculator_req.get_coin_by_symbol(algo_data.default_coin)
 
+            # ВАЖНО: Для Etchash хэшрейт должен быть в GH/s (как на capminer.ru)
+            # Если пользователь ввел значение, думая что это TH/s, нужно конвертировать
+            algorithm_lower = algorithm.value.lower()
+            if algorithm_lower in ["etchash", "ethash", "etchash/ethash"]:
+                # Если значение слишком большое (больше 1000), возможно пользователь ввел в TH/s
+                # Конвертируем из TH/s в GH/s
+                if hashrate > 1000:
+                    hashrate = hashrate * 1000  # TH/s -> GH/s
+                # Иначе считаем, что уже в GH/s (как на capminer.ru)
+
             result = MiningCalculator.calculate_profitability(
                 hash_rate=hashrate,
                 power_consumption=power,
@@ -939,6 +966,24 @@ class Client:
             algo_data = await self.calculator_req.get_algorithm_data(algorithm)
             coin = await self.calculator_req.get_coin_by_symbol(algo_data.default_coin)
 
+            # ВАЖНО: Для Etchash хэшрейт должен быть в GH/s (как на capminer.ru)
+            # Если пользователь ввел значение, думая что это TH/s, нужно конвертировать
+            algorithm_lower = algorithm.value.lower()
+            # В базе данных ETCHASH определен как "Etchash/Ethash"
+            hashrate_display = hashrate
+            hashrate_unit_display = "TH/s"
+            
+            if algorithm_lower in ["etchash", "ethash", "etchash/ethash"]:
+                # Если значение меньше 1, возможно пользователь ввел в TH/s (например, 0.5 TH/s = 500 GH/s)
+                # Конвертируем из TH/s в GH/s
+                if hashrate < 1:
+                    hashrate = hashrate * 1000  # TH/s -> GH/s
+                hashrate_unit_display = "GH/s"
+                hashrate_display = hashrate
+            elif algorithm_lower in ["scrypt", "kheavyhash", "blake2s", "blake2b+sha3", "blake2b_sha3"]:
+                hashrate_unit_display = "GH/s"
+            # Для SHA-256 остается TH/s
+
             result = MiningCalculator.calculate_profitability(
                 hash_rate=hashrate,
                 power_consumption=power,
@@ -956,7 +1001,7 @@ class Client:
 
             text = (
                 f"⚙️ **Алгоритм:** {algorithm.value}\n"
-                f"⚡ **Хэшрейт:** {hashrate} TH/s\n"
+                f"⚡ **Хэшрейт:** {hashrate_display} {hashrate_unit_display}\n"
                 f"🔌 **Мощность:** {power}W\n\n"
             )
             text = MiningCalculator.format_result(result, [coin.symbol], usd_to_rub)
@@ -1034,6 +1079,24 @@ class Client:
             algo_data = await self.calculator_req.get_algorithm_data(algorithm)
             coin = await self.calculator_req.get_coin_by_symbol(algo_data.default_coin)
 
+            # ВАЖНО: Для Etchash хэшрейт должен быть в GH/s (как на capminer.ru)
+            # Если пользователь ввел значение, думая что это TH/s, нужно конвертировать
+            algorithm_lower = algorithm.value.lower()
+            hashrate_display = hashrate
+            hashrate_unit_display = "TH/s"
+            
+            # В базе данных ETCHASH определен как "Etchash/Ethash"
+            if algorithm_lower in ["etchash", "ethash", "etchash/ethash"]:
+                # Если значение меньше 1, возможно пользователь ввел в TH/s (например, 0.5 TH/s = 500 GH/s)
+                # Конвертируем из TH/s в GH/s
+                if hashrate < 1:
+                    hashrate = hashrate * 1000  # TH/s -> GH/s
+                hashrate_unit_display = "GH/s"
+                hashrate_display = hashrate
+            elif algorithm_lower in ["scrypt", "kheavyhash", "blake2s", "blake2b+sha3", "blake2b_sha3"]:
+                hashrate_unit_display = "GH/s"
+            # Для SHA-256 остается TH/s
+
             result = MiningCalculator.calculate_profitability(
                 hash_rate=hashrate,
                 power_consumption=power,
@@ -1051,7 +1114,7 @@ class Client:
 
             text = (
                 f"⚙️ **Алгоритм:** {algorithm.value}\n"
-                f"⚡ **Хэшрейт:** {hashrate} TH/s\n"
+                f"⚡ **Хэшрейт:** {hashrate_display} {hashrate_unit_display}\n"
                 f"🔌 **Мощность:** {power}W\n\n"
             )
             text += MiningCalculator.format_result_rub(
@@ -1127,8 +1190,21 @@ class Client:
             if hashrate <= 0:
                 raise ValueError
         except ValueError:
+            # Определяем единицы измерения для сообщения об ошибке
+            data = await state.get_data()
+            algorithm = data.get("algorithm")
+            hashrate_unit = "TH/s"  # По умолчанию
+            
+            if algorithm:
+                algorithm_lower = algorithm.value.lower()
+                # В базе данных ETCHASH определен как "Etchash/Ethash"
+                if algorithm_lower in ["sha-256", "sha256"]:
+                    hashrate_unit = "TH/s"
+                elif algorithm_lower in ["scrypt", "etchash", "ethash", "etchash/ethash", "kheavyhash", "blake2s", "blake2b+sha3", "blake2b_sha3"]:
+                    hashrate_unit = "GH/s"
+            
             await message.answer(
-                "❌ Введите положительное число:",
+                f"❌ Введите положительное число ({hashrate_unit}):",
                 reply_markup=await CalculatorKB.hashrate_input(),
             )
             return
@@ -1143,8 +1219,30 @@ class Client:
     async def back_calc_hashrate_handler(
         self, call: types.CallbackQuery, state: FSMContext
     ):
+        data = await state.get_data()
+        algorithm = data.get("algorithm")
+        
+        # Определяем единицы измерения хэшрейта для каждого алгоритма
+        if algorithm:
+            algorithm_lower = algorithm.value.lower()
+            # В базе данных ETCHASH определен как "Etchash/Ethash"
+            if algorithm_lower in ["sha-256", "sha256"]:
+                hashrate_unit = "TH/s"
+            elif algorithm_lower in ["scrypt"]:
+                hashrate_unit = "GH/s"
+            elif algorithm_lower in ["etchash", "ethash", "etchash/ethash"]:
+                hashrate_unit = "GH/s"  # Для Etchash вводим в GH/s
+            elif algorithm_lower in ["kheavyhash"]:
+                hashrate_unit = "GH/s"
+            elif algorithm_lower in ["blake2s", "blake2b+sha3", "blake2b_sha3"]:
+                hashrate_unit = "GH/s"
+            else:
+                hashrate_unit = "TH/s"  # По умолчанию
+        else:
+            hashrate_unit = "TH/s"
+        
         await call.message.edit_text(
-            "⚡ Введите ваш хешрейт (TH/s):",
+            f"⚡ Введите ваш хешрейт ({hashrate_unit}):",
             reply_markup=await CalculatorKB.hashrate_input(),
         )
         await state.set_state(CalculatorState.input_hashrate)

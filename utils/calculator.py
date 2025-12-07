@@ -4,12 +4,21 @@ from typing import Any, Dict, List
 
 
 class MiningCalculator:
+    # Множители для конвертации в H/s (хешей в секунду)
+    UNIT_MULTIPLIERS = {
+        "th/s": 1_000_000_000_000,  # TH/s -> H/s (терахеш)
+        "gh/s": 1_000_000_000,      # GH/s -> H/s (гигахеш)
+        "mh/s": 1_000_000,          # MH/s -> H/s (мегахеш)
+        "kh/s": 1_000,              # KH/s -> H/s (килохеш)
+        "h/s": 1                    # H/s -> H/s (хеш)
+    }
+
     @staticmethod
     def get_algorithm_params(algorithm: str) -> Dict[str, float]:
         params = {
             "block_time": 600,
             "difficulty_factor": 1.0,
-            "efficiency_factor": 1.0,
+            "efficiency_factor": 1.0,  # Capminer.ru не использует efficiency_factor
             "hashrate_unit": "th/s"
         }
 
@@ -19,8 +28,8 @@ class MiningCalculator:
             params.update({"hashrate_unit": "th/s", "block_time": 600})
         elif algorithm_lower in ["scrypt"]:
             params.update({"hashrate_unit": "mh/s", "block_time": 150})
-        elif algorithm_lower in ["etchash", "ethash"]:
-            params.update({"hashrate_unit": "mh/s", "block_time": 13})
+        elif algorithm_lower in ["etchash", "ethash", "etchash/ethash"]:
+            params.update({"hashrate_unit": "gh/s", "block_time": 13})  # На capminer.ru для Etchash используется GH/s
         elif algorithm_lower in ["kheavyhash"]:
             params.update({"hashrate_unit": "gh/s", "block_time": 1})
         elif algorithm_lower in ["blake2s"]:
@@ -37,7 +46,9 @@ class MiningCalculator:
         electricity_price_rub: float,
         coin_data: Dict[str, Dict],
         usd_to_rub: float,
-        algorithm: str = "sha256"
+        algorithm: str = "sha256",
+        pool_fee: float = 0.0,  # Комиссия пула (например, 0.015 для 1.5%)
+        electricity_price_usd: float = None  # Цена электроэнергии в USD (опционально)
     ) -> Dict[str, Any]:
         first_coin = list(coin_data.keys())[0]
         info = coin_data[first_coin]
@@ -46,31 +57,104 @@ class MiningCalculator:
         algo_params = MiningCalculator.get_algorithm_params(algorithm)
         unit = algo_params["hashrate_unit"]
 
-        # ✅ Теперь всё в родных единицах
+        # ========================================================================
+        # ФОРМУЛА РАСЧЕТА ДОХОДА ПО ХЭШРЕЙТУ (на основе capminer.ru):
+        # ========================================================================
+        # 
+        # ШАГ 1: Расчет доли майнера в сети
+        #   share = miner_hashrate / network_hashrate
+        #   ВАЖНО: единицы измерения должны совпадать!
+        #   Для SHA-256: оба в TH/s
+        #   Для Scrypt: оба в GH/s
+        #   Для Etchash: оба в MH/s
+        #   Для kHeavyHash: оба в GH/s
+        #
+        # ШАГ 2: Расчет количества блоков в день
+        #   blocks_per_day = 86400 / block_time
+        #   Для kHeavyHash: blocks_per_day = 86400 (1 блок в секунду)
+        #   ВАЖНО: block_time может быть разным для разных монет одного алгоритма
+        #   (например, LTC и DOGE оба Scrypt, но block_time разный: 150 и 60 сек)
+        #
+        # ШАГ 3: Расчет количества монет в день (БЕЗ комиссии пула)
+        #   daily_coins_without_fee = share × blocks_per_day × block_reward
+        #
+        # ШАГ 4: Применение комиссии пула
+        #   daily_coins = daily_coins_without_fee × (1 - pool_fee)
+        #   Если pool_fee = 0.015 (1.5%), то daily_coins = daily_coins_without_fee × 0.985
+        #
+        # ШАГ 5: Расчет дохода в USD
+        #   daily_income_usd = daily_coins × coin_price_usd
+        #
+        # ШАГ 6: Расчет дохода в RUB
+        #   daily_income_rub = daily_income_usd × usd_to_rub
+        #
+        # ПРИМЕЧАНИЕ: efficiency_factor НЕ используется (capminer.ru его не применяет)
+        # ========================================================================
+        
+        # ВАЖНО: Конвертируем единицы измерения для правильного расчета доли
+        # hash_rate приходит в единицах, указанных в algo_params["hashrate_unit"]
+        # network_hashrate в БД может быть в других единицах
+        # Нужно привести к одинаковым единицам!
+        
+        # Определяем единицы для network_hashrate на основе алгоритма
+        # Для SHA-256: оба в TH/s
+        # Для Scrypt: оба в GH/s (network_hashrate в БД в GH/s)
+        # Для Etchash: hash_rate приходит в GH/s (как на capminer.ru), network_hashrate в БД в MH/s
+        # Для kHeavyHash: оба в GH/s
+        
         miner_hash = hash_rate
         network_hash = info["network_hashrate"]
-
+        
+        # Конвертация единиц для Etchash
+        # Если алгоритм Etchash и hash_rate в GH/s, а network_hashrate в MH/s
+        algorithm_lower_check = algorithm.lower()
+        if algorithm_lower_check in ["etchash", "ethash", "etchash/ethash"]:
+            # Конвертируем miner_hashrate из GH/s в MH/s
+            miner_hash = hash_rate * 1000  # GH/s -> MH/s
+        
+        # ШАГ 1: Рассчитываем долю майнера (единицы должны совпадать!)
         share = miner_hash / network_hash if network_hash > 0 else 0
 
+        # ШАГ 2: Блоков в день
+        block_time = info.get("block_time", algo_params["block_time"])
+        
         if algorithm.lower() == "kheavyhash":
-            blocks_per_day = 86400
+            blocks_per_day = 86400  # 1 блок в секунду
         else:
-            blocks_per_day = 86400 / algo_params["block_time"]
+            blocks_per_day = 86400 / block_time
 
-        daily_coins = share * blocks_per_day * info["block_reward"]
-        daily_coins *= algo_params["efficiency_factor"]
-
+        # ШАГ 3: Расчет количества монет в день (БЕЗ комиссии пула)
+        daily_coins_without_fee = share * blocks_per_day * info["block_reward"]
+        
+        # ШАГ 4: Применяем комиссию пула (если указана)
+        if pool_fee > 0:
+            daily_coins = daily_coins_without_fee * (1 - pool_fee)
+        else:
+            daily_coins = daily_coins_without_fee
+        
+        # ШАГ 5 и 6: Расчет дохода
         daily_income_usd = daily_coins * info["price"]
         daily_income_rub = daily_income_usd * usd_to_rub
-        daily_electricity_cost_rub = (power_consumption / 1000) * 24 * electricity_price_rub
-        daily_electricity_cost_usd = daily_electricity_cost_rub / usd_to_rub
+        
+        # Расчет затрат на электроэнергию
+        # Если указана цена в USD, используем её, иначе конвертируем из рублей
+        if electricity_price_usd is not None:
+            daily_electricity_cost_usd = (power_consumption / 1000) * 24 * electricity_price_usd
+            daily_electricity_cost_rub = daily_electricity_cost_usd * usd_to_rub
+        else:
+            daily_electricity_cost_rub = (power_consumption / 1000) * 24 * electricity_price_rub
+            daily_electricity_cost_usd = daily_electricity_cost_rub / usd_to_rub
+        
+        # Расчет прибыли
         daily_profit_usd = daily_income_usd - daily_electricity_cost_usd
         daily_profit_rub = daily_income_rub - daily_electricity_cost_rub
 
         def make_period(multiplier: int) -> Dict[str, Any]:
             coins_per_coin = {}
-            for symbol, coin in coin_data.items():
-                coins = (daily_income_usd / coin["price"]) * multiplier if coin["price"] > 0 else 0
+            # Используем daily_coins напрямую для всех монет (количество монет одинаково)
+            # daily_coins уже рассчитано на основе доли майнера и награды за блок
+            for symbol in coin_data.keys():
+                coins = daily_coins * multiplier
                 coins_per_coin[symbol] = coins
             return {
                 "coins_per_coin": coins_per_coin,
