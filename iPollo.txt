@@ -1,0 +1,21 @@
+iPollo V1H 850mh   690W
+
+iPollo V1H 950mh  690W
+
+iPollo V2H 3000 MH/s  475W
+
+iPollo V2H 3100 MH/s 475W
+
+iPollo V2H 3200 MH/s 475W
+
+iPollo V2H 3300 MH/s 475W
+
+iPollo V2H 3400 MH/s 475W
+
+iPollo V2H 3500 MH/s 475W
+
+iPollo V2H 3600 MH/s 475W
+
+iPollo V2H 3700 MH/s 475W
+
+iPollo V2X 1200 MH/s 475W

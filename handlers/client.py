@@ -41,6 +41,38 @@ class Client:
         self.guide_req = bot.guide_req
         self.latest_price_link = None
 
+    def _get_coin_filter_rules(self) -> dict:
+        """Возвращает правила фильтрации монет для определенных майнеров"""
+        return {
+            (Manufacturer.BITMAIN, "E9"): "ETC",
+            (Manufacturer.BITMAIN, "L7"): "LTC",
+            (Manufacturer.BITMAIN, "L9"): "LTC",
+            (Manufacturer.BITMAIN, "S19"): "BTC",
+            (Manufacturer.BITMAIN, "S21"): "BTC",
+            (Manufacturer.BITMAIN, "T21"): "BTC",
+            (Manufacturer.WHATSMINER, "M30"): "BTC",
+            (Manufacturer.WHATSMINER, "M50"): "BTC",
+            (Manufacturer.WHATSMINER, "M60"): "BTC",
+            (Manufacturer.WHATSMINER, "M61"): "BTC",
+            (Manufacturer.IPOLLO, "iPollo"): "ETC",
+        }
+
+    async def _filter_coins_for_miner(
+        self, model_line, all_coins: list
+    ) -> list:
+        """Фильтрует монеты для майнера согласно правилам"""
+        filter_rules = self._get_coin_filter_rules()
+        filter_key = (model_line.manufacturer, model_line.name)
+        
+        if filter_key in filter_rules:
+            # Оставляем только указанную монету
+            target_coin = filter_rules[filter_key]
+            filtered = [c for c in all_coins if c["symbol"] == target_coin]
+            return filtered if filtered else all_coins
+        else:
+            # Нет правила фильтрации - оставляем все монеты
+            return all_coins
+
     async def register_handlers(self):
         self.dp.message(Command("start"))(self.start_handler)
         self.dp.message(Command("sell"))(self.sell_start_handler)
@@ -814,6 +846,8 @@ class Client:
             coin_symbols = []
 
             if model.get_coin and model.get_coin.strip():
+                # Собираем все монеты из get_coin
+                all_coins = []
                 for coin_str in model.get_coin.split(","):
                     coin_symbol = coin_str.strip().upper()
                     coin = await self.calculator_req.get_coin_by_symbol(coin_symbol)
@@ -822,13 +856,27 @@ class Client:
                             coin.algorithm
                         )
                         if algo_data:
-                            coin_data[coin_symbol] = {
-                                "price": coin.current_price_usd,
-                                "network_hashrate": algo_data.network_hashrate,
-                                "block_reward": algo_data.block_reward,
-                                "algorithm": coin.algorithm.value.lower(),
-                            }
-                            coin_symbols.append(coin_symbol)
+                            all_coins.append({
+                                "symbol": coin_symbol,
+                                "coin": coin,
+                                "algo_data": algo_data
+                            })
+                
+                # Применяем фильтрацию монет согласно правилам
+                filtered_coins = await self._filter_coins_for_miner(model_line, all_coins)
+                
+                # Формируем coin_data из отфильтрованных монет
+                for coin_info in filtered_coins:
+                    coin_symbol = coin_info["symbol"]
+                    coin = coin_info["coin"]
+                    algo_data = coin_info["algo_data"]
+                    coin_data[coin_symbol] = {
+                        "price": coin.current_price_usd,
+                        "network_hashrate": algo_data.network_hashrate,
+                        "block_reward": algo_data.block_reward,
+                        "algorithm": coin.algorithm.value.lower(),
+                    }
+                    coin_symbols.append(coin_symbol)
             else:
                 algo_data = await self.calculator_req.get_algorithm_data(
                     model_line.algorithm

@@ -156,10 +156,10 @@ SELECT
     'LTC, DOGE',
     true
 FROM (VALUES
-    ('Bitmain Antminer L9 15 GH/s', 15000, 3260),
-    ('Bitmain Antminer L9 16 GH/s', 16000, 3260),
-    ('Bitmain Antminer L9 17 GH/s', 17000, 3260),
-    ('Bitmain Antminer L9 17,6 GH/s', 17600, 3260)
+    ('Bitmain Antminer L9 15 GH/s', 15, 3260),
+    ('Bitmain Antminer L9 16 GH/s', 16, 3260),
+    ('Bitmain Antminer L9 17 GH/s', 17, 3260),
+    ('Bitmain Antminer L9 17,6 GH/s', 17.6, 3260)
 ) AS models(model_name, hash_rate, power_consumption)
 WHERE NOT EXISTS (
     SELECT 1 FROM asic_models am 
@@ -308,16 +308,14 @@ SELECT
     true
 FROM (VALUES
     ('Whatsminer M30S 100 TH/s', 100, 3400),
-    ('Whatsminer M30S 102 TH/s', 102, 3400),
-    ('Whatsminer M30S 104 TH/s', 104, 3400),
-    ('Whatsminer M30S 106 TH/s', 106, 3400),
-    ('Whatsminer M30S 108 TH/s', 108, 3400),
-    ('Whatsminer M30S 110 TH/s', 110, 3400),
-    ('Whatsminer M33S 216 TH/s', 216, 3900),
-    ('Whatsminer M36S 172 TH/s', 172, 3420),
-    ('Whatsminer M36S 238 TH/s', 238, 3420),
-    ('Whatsminer M60 166 TH/s', 166, 3250),
-    ('Whatsminer M60 176 TH/s', 176, 3250)
+    ('Whatsminer M30S 102 TH/s', 102, 3334),
+    ('Whatsminer M30S 104 TH/s', 104, 3334),
+    ('Whatsminer M30S 106 TH/s', 106, 3286),
+    ('Whatsminer M30S 108 TH/s', 108, 3472),
+    ('Whatsminer M30S 110 TH/s', 110, 3334),
+    ('Whatsminer M33S 216 TH/s', 216, 6820),
+    ('Whatsminer M36S 172 TH/s', 172, 4712),
+    ('Whatsminer M36S 238 TH/s', 238, 6758)
 ) AS models(model_name, hash_rate, power_consumption)
 WHERE NOT EXISTS (
     SELECT 1 FROM asic_models am 
@@ -327,11 +325,63 @@ WHERE NOT EXISTS (
     AND aml.manufacturer = 'WHATSMINER'
 );
 
--- Ice River
--- Модели Ice River (используем SHA256 как временное решение)
+-- Модели М60
 INSERT INTO asic_model_lines (name, manufacturer, algorithm)
 VALUES 
-('Ice River', 'ICERIVER', 'SHA256')
+('M60', 'WHATSMINER', 'SHA256')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO asic_models (name, model_line_id, hash_rate, power_consumption, get_coin, is_active)
+SELECT 
+    model_name,
+    (SELECT id FROM asic_model_lines WHERE name = 'M60' AND manufacturer = 'WHATSMINER'),
+    hash_rate,
+    power_consumption,
+    'BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE',
+    true
+FROM (VALUES
+    ('Whatsminer M60 166 TH/s', 166, 3338),
+    ('Whatsminer M60 176 TH/s', 176, 3338)
+) AS models(model_name, hash_rate, power_consumption)
+WHERE NOT EXISTS (
+    SELECT 1 FROM asic_models am 
+    JOIN asic_model_lines aml ON am.model_line_id = aml.id 
+    WHERE am.name = models.model_name 
+    AND aml.name = 'M60' 
+    AND aml.manufacturer = 'WHATSMINER'
+);
+
+-- Модели М61
+INSERT INTO asic_model_lines (name, manufacturer, algorithm)
+VALUES 
+('M61', 'WHATSMINER', 'SHA256')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO asic_models (name, model_line_id, hash_rate, power_consumption, get_coin, is_active)
+SELECT 
+    model_name,
+    (SELECT id FROM asic_model_lines WHERE name = 'M61' AND manufacturer = 'WHATSMINER'),
+    hash_rate,
+    power_consumption,
+    'BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE',
+    true
+FROM (VALUES
+    ('Whatsminer M61 200 TH/s', 200, 3980),
+    ('Whatsminer M61S 238 Th/s', 238, 4040)
+) AS models(model_name, hash_rate, power_consumption)
+WHERE NOT EXISTS (
+    SELECT 1 FROM asic_models am 
+    JOIN asic_model_lines aml ON am.model_line_id = aml.id 
+    WHERE am.name = models.model_name 
+    AND aml.name = 'M61' 
+    AND aml.manufacturer = 'WHATSMINER'
+);
+
+-- Ice River
+-- Модели Ice River (kHeavyHash)
+INSERT INTO asic_model_lines (name, manufacturer, algorithm)
+VALUES 
+('Ice River', 'ICERIVER', 'KHEAVYHASH')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO asic_models (name, model_line_id, hash_rate, power_consumption, get_coin, is_active)
@@ -343,11 +393,14 @@ SELECT
     'KASPA',
     true
 FROM (VALUES
-    ('IceRiver KS0 ultra', 400, 100),
-    ('ICERIVER KAS KS0 PRO', 200, 100),
+    -- KS0 ultra: 400 GH/s = 0.4 TH/s (для kHeavyHash все в TH/s)
+    ('IceRiver KS0 ultra', 0.4, 100),
+    -- KS0 PRO: 200 GH/s = 0.2 TH/s
+    ('ICERIVER KAS KS0 PRO', 0.2, 100),
+    -- Остальные уже в TH/s
     ('Iceriver KS2 Lite', 2, 500),
     ('ICERIVER KS3M', 6, 3200),
-    ('ICERIVER KS5L', 12, 3400)
+    ('ICERIVER KS5L', 12, 3200)
 ) AS models(model_name, hash_rate, power_consumption)
 WHERE NOT EXISTS (
     SELECT 1 FROM asic_models am 
@@ -358,7 +411,11 @@ WHERE NOT EXISTS (
 );
 
 -- Goldshell
--- Модели Goldshell (используем SHA256 как временное решение)
+-- Модели Goldshell (разные алгоритмы, используем SHA256 как общий)
+-- E-DG1M: Dogecoin (Scrypt) - 3400 MH/s
+-- E-KA1M: Kadena (Blake2S) - 5.5 TH/s
+-- KA BOX: Kadena (Blake2S) - 1.18 TH/s
+-- AL BOX: Alephium (Blake2B+SHA3) - 360 GH/s
 INSERT INTO asic_model_lines (name, manufacturer, algorithm)
 VALUES 
 ('Goldshell', 'GOLDSHELL', 'SHA256')
@@ -370,14 +427,14 @@ SELECT
     (SELECT id FROM asic_model_lines WHERE name = 'Goldshell' AND manufacturer = 'GOLDSHELL'),
     hash_rate,
     power_consumption,
-    'Various',
+    get_coin,
     true
 FROM (VALUES
-    ('Goldshell E-DG1M', 3400, 1800),
-    ('Goldshell E-KA1M', 5.5, 1800),
-    ('Goldshell KA BOX 1.18TH', 1.18, 400),
-    ('Goldshell AL BOX 360G', 360, 240)
-) AS models(model_name, hash_rate, power_consumption)
+    ('Goldshell E-DG1M', 3400, 1800, 'DOGE'),
+    ('Goldshell E-KA1M', 5.5, 1800, 'KDA'),
+    ('Goldshell KA BOX 1.18TH', 1.18, 400, 'KDA'),
+    ('Goldshell AL BOX 360G', 360, 180, 'KLS')
+) AS models(model_name, hash_rate, power_consumption, get_coin)
 WHERE NOT EXISTS (
     SELECT 1 FROM asic_models am 
     JOIN asic_model_lines aml ON am.model_line_id = aml.id 
@@ -387,10 +444,10 @@ WHERE NOT EXISTS (
 );
 
 -- iPollo
--- Модели iPollo (используем SHA256 как временное решение)
+-- Модели iPollo (Etchash)
 INSERT INTO asic_model_lines (name, manufacturer, algorithm)
 VALUES 
-('iPollo', 'IPOLLO', 'SHA256')
+('iPollo', 'IPOLLO', 'ETCHASH')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO asic_models (name, model_line_id, hash_rate, power_consumption, get_coin, is_active)

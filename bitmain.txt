@@ -1,0 +1,163 @@
+Bitmain Antminer S19 82 TH/s 3250W
+
+Bitmain Antminer S19 86 TH/s 3250W
+
+Bitmain Antminer S19 86 TH/s 126 Chip 3250W
+
+Bitmain Antminer S19 90 TH/s 3250W
+
+Bitmain Antminer S19 90 TH/s 126 Chip 3250W
+
+Bitmain Antminer S19 95 TH/s 3250W
+
+Bitmain Antminer S19 Pro 86 TH/s 3250W
+
+Bitmain Antminer S19 PRO 104 TH/s 3250W
+
+Bitmain Antminer S19 PRO 110TH/s 3250W
+
+Bitmain Antminer S19 PRO+ Hydro 184 TH/s 5060W
+
+Bitmain Antminer S19 PRO+ Hydro 198 TH/s 5440W
+
+Bitmain Antminer S19K PRO 110 TH/s 3000W
+
+Bitmain Antminer S19K PRO 115 TH/s 3000W
+
+Bitmain Antminer S19K PRO 120 TH/s 3000W
+
+Bitmain Antminer S19K PRO 136 TH/s 3050W
+
+Bitmain Antminer S19 JXP 143 TH/s 3050W
+
+Bitmain Antminer S19 XP 141 TH/s 3050W
+
+Bitmain Antminer S19 XP 134 TH/s 3050W
+
+Bitmain Antminer S19 JXP 151 TH/s 3050W
+
+Bitmain Antminer S19 XP Hydro 257 TH/s 5300W
+
+Bitmain Antminer S19J PRO 100 TH/s 3250W
+
+Bitmain Antminer S19J PRO 104 TH/s 3250W
+
+Bitmain Antminer S19J PRO+ 117 TH/S 3350W
+
+Bitmain Antminer S19J PRO+ 120 TH/S 3355W
+
+Bitmain Antminer S19J PRO+ 122 TH/S 3355W
+
+
+
+
+
+Bitmain Antminer S21 200TH/s 3500W
+
+Bitmain Antminer S21 188 TH/s 3500W
+
+Bitmain Antminer S21 195 TH/s 3500W
+
+Bitmain Antminer S21+ 216 TH/s 3500W
+
+Bitmain Antminer S21 Pro 220 TH/s 3500W
+
+Bitmain Antminer S21 Pro 234 TH/s 3500W
+
+Bitmain Antminer S21 XP 270 TH/s 3650W
+
+Bitmain Antminer S21 Hydro 319 Th/s 5360W
+
+Bitmain Antminer S21 Hydro 335 Th/s 5360W
+
+Bitmain Antminer S21 XP Hydro 473 Th/s 5680W
+
+Bitmain Antminer S21 XP IMM 300 Th/s 4050W
+
+Bitmain Antminer S21 IMM 239 Th/s 4050W
+
+Bitmain Antminer U3S21EXPH 860 Th/s 11200W
+
+
+Bitmain Antminer T21 180 TH/s 3610W
+
+Bitmain Antminer T21 186 TH/s 3610W
+
+Bitmain Antminer T21 190 TH/s 3610W
+
+
+Bitmain Antminer L7 8800 MH/s 3172W
+
+Bitmain Antminer L7 8550 MH/s 3300W
+
+Bitmain Antminer L7 9050MH/s 3260W
+
+Bitmain Antminer L7 9300 MH/s 3350W
+
+Bitmain Antminer L7 9500 MH/s 3420W
+
+
+
+
+Bitmain Antminer L9 15 GH/s 3260W
+
+Bitmain Antminer L9 16 GH/s 3260W
+
+Bitmain Antminer L9 17 GH/s 3260W
+
+Bitmain Antminer L9 17,6 GH/s 3260W
+
+
+Bitmain Antminer E9 2400 MH/s 2500W
+
+Bitmain Antminer E9 Pro 3280 MH/s 2200W
+
+Bitmain Antminer E9 Pro 3380 MH/s 2200W
+
+Bitmain Antminer E9 Pro 3480 MH/s 2200W
+
+Bitmain Antminer E9 Pro 3580 MH/s 2200W
+
+Bitmain Antminer E9 Pro 3680 MH/s 2200W
+
+Bitmain Antminer E9 Pro 3780 MH/s 2200W
+
+
+Bitmain Antminer KA3 173 TH/s 3154W
+
+
+Bitmain Antminer KAS Miner KS5 3150W
+
+Bitmain Antminer KAS Miner KS5 Pro 3150W
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

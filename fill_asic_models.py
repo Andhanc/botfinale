@@ -175,41 +175,71 @@ async def fill_asic_models():
         )
         m30_models = [
             ("Whatsminer M30S 100 TH/s", 100, 3400, "BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE"),
-            ("Whatsminer M30S 102 TH/s", 102, 3400, "BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE"),
-            ("Whatsminer M30S 104 TH/s", 104, 3400, "BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE"),
-            ("Whatsminer M30S 106 TH/s", 106, 3400, "BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE"),
-            ("Whatsminer M30S 108 TH/s", 108, 3400, "BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE"),
-            ("Whatsminer M30S 110 TH/s", 110, 3400, "BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE"),
-            ("Whatsminer M33S 216 TH/s", 216, 3900, "BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE"),
-            ("Whatsminer M36S 172 TH/s", 172, 3420, "BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE"),
-            ("Whatsminer M36S 238 TH/s", 238, 3420, "BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE"),
-            ("Whatsminer M60 166 TH/s", 166, 3250, "BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE"),
-            ("Whatsminer M60 176 TH/s", 176, 3250, "BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE"),
+            ("Whatsminer M30S 102 TH/s", 102, 3334, "BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE"),
+            ("Whatsminer M30S 104 TH/s", 104, 3334, "BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE"),
+            ("Whatsminer M30S 106 TH/s", 106, 3286, "BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE"),
+            ("Whatsminer M30S 108 TH/s", 108, 3472, "BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE"),
+            ("Whatsminer M30S 110 TH/s", 110, 3334, "BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE"),
+            ("Whatsminer M33S 216 TH/s", 216, 6820, "BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE"),
+            ("Whatsminer M36S 172 TH/s", 172, 4712, "BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE"),
+            ("Whatsminer M36S 238 TH/s", 238, 6758, "BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE"),
         ]
         await add_models(session, m30_line.id, m30_models)
+        
+        # WHATSMINER - M60
+        m60_line = await get_or_create_model_line(
+            session, "M60", Manufacturer.WHATSMINER, Algorithm.SHA256
+        )
+        m60_models = [
+            ("Whatsminer M60 166 TH/s", 166, 3338, "BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE"),
+            ("Whatsminer M60 176 TH/s", 176, 3338, "BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE"),
+        ]
+        await add_models(session, m60_line.id, m60_models)
+        
+        # WHATSMINER - M61
+        m61_line = await get_or_create_model_line(
+            session, "M61", Manufacturer.WHATSMINER, Algorithm.SHA256
+        )
+        m61_models = [
+            ("Whatsminer M61 200 TH/s", 200, 3980, "BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE"),
+            ("Whatsminer M61S 238 Th/s", 238, 4040, "BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE"),
+        ]
+        await add_models(session, m61_line.id, m61_models)
         
         # ICERIVER - Ice River (kHeavyHash)
         iceriver_line = await get_or_create_model_line(
             session, "Ice River", Manufacturer.ICERIVER, Algorithm.KHEAVYHASH
         )
         iceriver_models = [
-            ("IceRiver KS0 ultra", 400, 100, "KASPA"),
-            ("ICERIVER KAS KS0 PRO", 200, 100, "KASPA"),
+            # KS0 ultra: 400 GH/s = 0.4 TH/s (для kHeavyHash все в TH/s)
+            ("IceRiver KS0 ultra", 0.4, 100, "KASPA"),
+            # KS0 PRO: 200 GH/s = 0.2 TH/s
+            ("ICERIVER KAS KS0 PRO", 0.2, 100, "KASPA"),
+            # Остальные уже в TH/s
             ("Iceriver KS2 Lite", 2, 500, "KASPA"),
             ("ICERIVER KS3M", 6, 3200, "KASPA"),
-            ("ICERIVER KS5L", 12, 3400, "KASPA"),
+            ("ICERIVER KS5L", 12, 3200, "KASPA"),
         ]
         await add_models(session, iceriver_line.id, iceriver_models)
         
-        # GOLDSHELL - Goldshell (разные алгоритмы, используем SHA256 как временное)
+        # GOLDSHELL - Goldshell (разные алгоритмы)
+        # E-DG1M: Dogecoin (Scrypt) - 3400 MH/s
+        # E-KA1M: Kadena (Blake2S) - 5.5 TH/s
+        # KA BOX: Kadena (Blake2S) - 1.18 TH/s
+        # AL BOX: Alephium (Blake2B+SHA3) - 360 GH/s
+        # Используем SHA256 как общий алгоритм для всех моделей Goldshell
         goldshell_line = await get_or_create_model_line(
             session, "Goldshell", Manufacturer.GOLDSHELL, Algorithm.SHA256
         )
         goldshell_models = [
-            ("Goldshell E-DG1M", 3400, 1800, "Various"),
-            ("Goldshell E-KA1M", 5.5, 1800, "Various"),
-            ("Goldshell KA BOX 1.18TH", 1.18, 400, "Various"),
-            ("Goldshell AL BOX 360G", 360, 240, "Various"),
+            # E-DG1M: Dogecoin (Scrypt) - 3400 MH/s для Scrypt
+            ("Goldshell E-DG1M", 3400, 1800, "DOGE"),
+            # E-KA1M: Kadena (Blake2S) - 5.5 TH/s (запятая заменена на точку)
+            ("Goldshell E-KA1M", 5.5, 1800, "KDA"),
+            # KA BOX: Kadena (Blake2S) - 1.18 TH/s
+            ("Goldshell KA BOX 1.18TH", 1.18, 400, "KDA"),
+            # AL BOX: Alephium (Blake2B+SHA3) - 360 GH/s для Blake2B+SHA3
+            ("Goldshell AL BOX 360G", 360, 180, "KLS"),
         ]
         await add_models(session, goldshell_line.id, goldshell_models)
         

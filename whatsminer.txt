@@ -1,0 +1,67 @@
+
+
+Whatsminer M50S 126 TH/s 3480W
+
+Whatsminer M50S 128 TH/s 3380W
+
+Whatsminer M50S 130 TH/s 3380W
+
+Whatsminer M50S 250 TH/s 6750W
+
+Whatsminer M50 114 Th/s 3360W
+
+Whatsminer M50 116 TH/s 3360W
+
+Whatsminer M50 118 TH/s 3360W
+
+Whatsminer M50 120 TH/s 3480W
+
+Whatsminer M50 122 TH/s 3480W
+
+Whatsminer M50S++ 150 TH/s 3432W
+
+Whatsminer M50S++ 140 TH/s 3360W
+
+Whatsminer M50S++ 138 TH/s 3312W
+
+Whatsminer M50S++ 136 TH/s 3264W
+
+Whatsminer M53 230 TH/s  6820W
+
+Whatsminer M56S 200 TH/s  6572W
+
+Whatsminer M53S++ 320 TH/s 7040W
+
+
+
+Whatsminer M30S 100 TH/s   3400W
+
+Whatsminer M30S 102 TH/s  3334W
+
+Whatsminer M30S 104 TH/s  3334W
+
+Whatsminer M30S 106 TH/s   3286W
+
+Whatsminer M30S 108 TH/s   3472W
+
+Whatsminer M30S 110 TH/s  3334W
+
+Whatsminer M33S 216 TH/s   6820W
+
+Whatsminer M36S 172 TH/s   4712W
+
+Whatsminer M36S 238 TH/s    6758W
+
+
+
+
+Whatsminer M60 166 TH/s   3338W
+
+Whatsminer M60 176 TH/s   3338W
+
+Whatsminer М61 200 TH/s   3980W
+
+Whatsminer M61S 238 Th/s   4040W
+
+
+

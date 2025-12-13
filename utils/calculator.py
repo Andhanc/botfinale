@@ -149,12 +149,10 @@ class MiningCalculator:
         elif algorithm_lower_check in ["kheavyhash"]:
             # Для kHeavyHash:
             # - network_hashrate в БД: TH/s (например, 1,600,793 TH/s)
-            # - hash_rate должен быть в TH/s (KAS: 20 TH/s, Ice River: 400 TH/s, 200 TH/s, 2 TH/s, 6 TH/s, 12 TH/s)
-            # - Если hash_rate < 1, вероятно это GH/s, конвертируем в TH/s
-            if hash_rate < 1:  # Если значение очень маленькое, вероятно это GH/s
-                miner_hash = hash_rate / 1000  # GH/s -> TH/s
-            else:
-                miner_hash = hash_rate  # Уже в TH/s
+            # - hash_rate должен быть в TH/s (KAS: 20 TH/s, Ice River: 0.4 TH/s, 0.2 TH/s, 2 TH/s, 6 TH/s, 12 TH/s)
+            # - Все значения уже в TH/s (KS0 ultra: 400 GH/s = 0.4 TH/s, KS0 PRO: 200 GH/s = 0.2 TH/s)
+            # - Для ручного ввода пользователь вводит в TH/s (как указано в интерфейсе)
+            miner_hash = hash_rate  # Уже в TH/s
             # network_hash уже в TH/s, не конвертируем
         
         else:
