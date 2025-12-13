@@ -73,6 +73,30 @@ class Client:
             # Нет правила фильтрации - оставляем все монеты
             return all_coins
 
+    def _filter_coin_string_for_miner(
+        self, model_line, coin_string: str
+    ) -> str:
+        """Фильтрует строку монет для майнера согласно правилам (для отображения)"""
+        if not coin_string or not coin_string.strip():
+            return coin_string
+        
+        filter_rules = self._get_coin_filter_rules()
+        filter_key = (model_line.manufacturer, model_line.name)
+        
+        if filter_key in filter_rules:
+            # Оставляем только указанную монету
+            target_coin = filter_rules[filter_key]
+            # Разбиваем строку на монеты и ищем нужную
+            coins = [c.strip().upper() for c in coin_string.split(",")]
+            if target_coin in coins:
+                return target_coin
+            else:
+                # Если целевая монета не найдена, возвращаем исходную строку
+                return coin_string
+        else:
+            # Нет правила фильтрации - возвращаем все монеты
+            return coin_string
+
     async def register_handlers(self):
         self.dp.message(Command("start"))(self.start_handler)
         self.dp.message(Command("sell"))(self.sell_start_handler)
@@ -385,7 +409,9 @@ class Client:
         )
 
         if model.get_coin:
-            message += f"🪙 **Добывает:** {model.get_coin}\n"
+            # Применяем фильтрацию монет согласно правилам
+            filtered_coins = self._filter_coin_string_for_miner(model_line, model.get_coin)
+            message += f"🪙 **Добывает:** {filtered_coins}\n"
 
         await call.message.edit_text(message, reply_markup=await ClientKB.chars_back())
         try:
