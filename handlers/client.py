@@ -91,7 +91,6 @@ class Client:
         self.dp.callback_query(F.data == "calc_calc")(self.calc_calc_handler)
         self.dp.callback_query(F.data == "calc_chars")(self.calc_chars_handler)
         self.dp.callback_query(F.data == "calc_coins")(self.calc_coins_handler)
-        self.dp.callback_query(F.data == "document")(self.send_file_price)
 
         self.dp.callback_query(F.data == "better_price")(self.better_price_handler)
         self.dp.message(
@@ -240,29 +239,6 @@ class Client:
             await call.answer()
         except TelegramBadRequest:
             pass
-
-    async def send_file_price(self, call: types.CallbackQuery, state: FSMContext):
-        await state.clear()
-        await call.message.delete()
-
-        file_path = "/Users/andrijserbak/Desktop/workfolder/tgbotproject/mainercrypto/image/repare.pdf"
-
-        try:
-            await self.bot.send_document(
-                chat_id=call.from_user.id,
-                document=types.FSInputFile(file_path),
-                caption="💸 Прайс ремонта машинок. Для запроса обратитесь к менеджеру @vadim_0350",
-                parse_mode=None,
-                reply_markup=await ClientKB.back_ai(),
-            )
-            logger.info(f"Файл успешно отправлен пользователю {call.from_user.id}")
-
-        except FileNotFoundError:
-            logger.error(f"Файл не найден: {file_path}")
-            await call.message.answer("❌ Файл временно недоступен")
-        except Exception as e:
-            logger.error(f"Ошибка при отправке файла: {e}")
-            await call.message.answer("❌ Произошла ошибка при отправке файла")
 
     async def price_list_handler(self, call: types.CallbackQuery):
         try:

@@ -23,7 +23,6 @@ class ClientKB:
         builder.button(text="🧮 Калькулятор", callback_data="calc_income")
         builder.button(text="🤖 AI-консультант", callback_data="ai_consult")
         builder.button(text="📋 Прайс-лист", callback_data="price_list")
-        builder.button(text="🛠️ Ремонт ASIC+", callback_data="document")
         builder.button(text="📞 Связаться с менеджером", url="https://t.me/vadim_0350")
         builder.button(text="👤 Профиль", callback_data="profile")
         builder.adjust(1)
