@@ -281,9 +281,17 @@ class CalculatorReq:
     async def update_link(self, link: str) -> bool:
         async with self.lock:
             async with self.db_session_maker() as session:
-                res = await session.execute(select(Link).where(Link.id == 2))
-                data = res.scalar()
-                data.link = link
+                # Пытаемся найти существующую запись с ссылкой
+                res = await session.execute(select(Link).order_by(Link.id.desc()))
+                data = res.scalars().first()
+
+                if data:
+                    # Обновляем существующую ссылку
+                    data.link = link
+                else:
+                    # Если записи нет — создаем новую
+                    data = Link(link=link)
+                    session.add(data)
 
                 await session.commit()
                 return True
@@ -291,8 +299,13 @@ class CalculatorReq:
     async def get_link(self) -> str:
         async with self.lock:
             async with self.db_session_maker() as session:
-                res = await session.execute(select(Link).where(Link.id == 2))
-                data = res.scalar()
+                # Берем последнюю (или единственную) запись из таблицы link
+                res = await session.execute(select(Link).order_by(Link.id.desc()))
+                data = res.scalars().first()
+
+                # Если ссылки нет в базе – возвращаем None
+                if not data:
+                    return None
 
                 return data.link
 

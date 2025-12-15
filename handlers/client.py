@@ -267,14 +267,16 @@ class Client:
     async def price_list_handler(self, call: types.CallbackQuery):
         try:
             link = await self.calculator_req.get_link()
-            if link:
-                await call.message.answer(
-                    f"📋 [Актуальный прайс-лист]({link})",
-                    parse_mode="Markdown",
-                    disable_web_page_preview=True,
-                )
-            else:
-                await call.message.answer("❌ Актуальный прайс-лист пока недоступен")
+            # Если в базе нет сохранённой ссылки на конкретный прайс,
+            # используем ссылку на канал Asic+, откуда ловим прайс по ключевому слову
+            if not link:
+                link = "https://t.me/asic_plus"
+
+            await call.message.answer(
+                f"📋 [Актуальный прайс-лист]({link})",
+                parse_mode="Markdown",
+                disable_web_page_preview=True,
+            )
 
         except Exception as e:
             print(f"Ошибка при поиске прайса: {e}")
@@ -453,6 +455,10 @@ class Client:
                 pass
             return
 
+        # Получаем актуальный курс доллара (USDT/RUB) через CoinGecko
+        coin_service = CoinGeckoService(self.settings)
+        usd_to_rub = await coin_service.get_usd_rub_rate()
+
         priority_order = ["BTC", "ETH", "LTC", "DOGE", "KAS"]
         
         filtered_coins = [coin for coin in coins if coin.symbol in priority_order]
@@ -461,6 +467,7 @@ class Client:
         sorted_coins = sorted(filtered_coins, key=lambda coin: priority_dict[coin.symbol])
 
         message = "💎 Текущие цены монет:\n\n"
+        message += f"🔄 Курс доллара: 1 USDT ≈ {usd_to_rub:.2f} RUB\n\n"
         for coin in sorted_coins:
             change_icon = "📈" if coin.price_change_24h >= 0 else "📉"
             message += (

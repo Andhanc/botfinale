@@ -96,14 +96,19 @@ class CoinGeckoService:
                 if coin.symbol == symbol
             ]
 
-            message = ""
+            # Курс доллара (USDT/RUB)
+            usd_to_rub = await self.get_usd_rub_rate()
+
+            # Сообщение в том же формате, что и в меню "Цены монет"
+            message = "💎 Текущие цены монет:\n\n"
+            message += f"🔄 Курс доллара: 1 USDT ≈ {usd_to_rub:.2f} RUB\n\n"
 
             for coin in filtered_coins:
                 if coin.symbol in prices_data:
                     data = prices_data[coin.symbol]
                     change_icon = "📈" if data["price_change"] >= 0 else "📉"
                     message += (
-                        f"🔸 *{coin.symbol}* ({coin.name})\n"
+                        f"🔸 {coin.symbol} ({coin.name})\n"
                         f"   💵 ${data['price_usd']:,.2f} | ₽{data['price_rub']:,.0f}\n"
                         f"   {change_icon} {data['price_change']:+.1f}%\n\n"
                     )
@@ -121,9 +126,8 @@ class CoinGeckoService:
             #                 f"Не удалось отправить уведомление пользователю {user.uid}: {e}"
             #             )
 
-            # # Отправка в канал
-            # await self.bot.send_message(-1001546174824, message, parse_mode="Markdown")
-            # logger.info(f"Уведомления отправлены {len(users)} пользователям")
+            # Делаем пост с курсом валют и монет в канал Asic+ (https://t.me/asic_plus)
+            await self.bot.send_message(-1001546174824, message, parse_mode="Markdown")
 
         except Exception as e:
             logger.error(f"Ошибка при отправке уведомлений: {e}")
