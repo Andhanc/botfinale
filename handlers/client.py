@@ -1,5 +1,6 @@
 # [file name]: client.py
 from asyncio.log import logger
+from pathlib import Path
 from typing import Any, Dict
 
 from aiogram import F, types
@@ -7,6 +8,7 @@ from aiogram.enums import ContentType
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, Filter
 from aiogram.fsm.context import FSMContext
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from config import ADMIN_ID
 from database.models import Algorithm, Manufacturer
@@ -177,6 +179,9 @@ class Client:
         self.dp.message(CalculatorState.input_hashrate)(self.calc_hashrate_handler)
         self.dp.message(CalculatorState.input_power)(self.calc_power_handler)
 
+        # Обработчики для формы продажи оборудования
+        # Регистрируем БЕЗ фильтра на content_type, чтобы обрабатывать все сообщения
+        # Проверка типа будет внутри обработчиков
         self.dp.message(SellForm.device)(self.sell_device_handler)
         self.dp.message(SellForm.price)(self.sell_price_handler)
         self.dp.message(SellForm.condition)(self.sell_condition_handler)
@@ -236,10 +241,17 @@ class Client:
 
         text = (
             f"👋 Привет, {user.first_name}!\n\n"
-            "Я AI-консультант по майнингу криптовалют. "
-            "Помогу рассчитать доходность, подобрать оборудование и ответить на все вопросы."
+            "Я — ваш AI-помощник в сфере майнинга криптовалют. "
+            "Могу провести расчёт потенциальной доходности, помочь с выбором подходящего оборудования "
+            "и дать подробные ответы на любые связанные с этим вопросы."
         )
-        photo = "https://i.yapx.ru/aaABM.png"
+        # Используем локальный файл с логотипом из папки image
+        photo_path = Path(__file__).parent.parent / "image" / "logo.JPG"
+        if photo_path.exists():
+            photo = types.FSInputFile(photo_path)
+        else:
+            # Запасной вариант - используем URL (если локальный файл не найден)
+            photo = "https://i.yapx.ru/aaABM.png"
         kb = await ClientKB.main_menu()
 
         if isinstance(message, types.CallbackQuery):
@@ -266,26 +278,22 @@ class Client:
 
     async def price_list_handler(self, call: types.CallbackQuery):
         try:
-            link = await self.calculator_req.get_link()
-            # Если в базе нет сохранённой ссылки на конкретный прайс,
-            # используем ссылку на канал Asic+, откуда ловим прайс по ключевому слову
-            if not link:
-                link = "https://t.me/asic_plus"
-
-            await call.message.answer(
-                f"📋 [Актуальный прайс-лист]({link})",
-                parse_mode="Markdown",
-                disable_web_page_preview=True,
-            )
-
+            # Сразу перекидываем пользователя на канал с прайс-листом
+            channel_url = "https://t.me/asic_mining_store"
+            await call.answer(url=channel_url)
         except Exception as e:
-            print(f"Ошибка при поиске прайса: {e}")
-            await call.message.answer("❌ Ошибка при поиске прайса")
-
-        try:
-            await call.answer()
-        except TelegramBadRequest:
-            pass
+            print(f"Ошибка при открытии канала: {e}")
+            # Если не удалось открыть через answer, отправляем сообщение с кнопкой
+            try:
+                builder = InlineKeyboardBuilder()
+                builder.button(text="📋 Перейти к прайс-листу", url=channel_url)
+                await call.message.answer(
+                    "📋 Нажмите на кнопку, чтобы перейти к актуальному прайс-листу:",
+                    reply_markup=builder.as_markup()
+                )
+                await call.answer()
+            except TelegramBadRequest:
+                pass
 
     async def profile_handler(self, call: types.CallbackQuery):
         await call.message.delete()
@@ -538,7 +546,7 @@ class Client:
                     f"От: @{user.username or user.first_name}\n"
                     f"ID: <code>{user.id}</code>\n\n"
                     f"{data['comment']}\n\n"
-                    f"С вами скоро свяжется менеджер @vadim_0350."
+                    f"С вами скоро свяжется менеджер @snooby37."
                 ),
                 parse_mode="HTML",
             )
@@ -551,7 +559,7 @@ class Client:
             return
 
         await call.message.edit_caption(
-            caption="✅ Спасибо! С вами скоро свяжется менеджер @vadim_0350.",
+            caption="✅ Спасибо! С вами скоро свяжется менеджер @snooby37.",
             parse_mode=None,
         )
         await state.clear()
@@ -581,8 +589,8 @@ class Client:
 — Криптой (<b>USDT</b>) — актуальный курс подскажет менеджер
 </blockquote>
 
-👨‍💼 Менеджер: <a href="https://t.me/vadim_0350">@vadim_0350</a>
-📢 Канал: <a href="https://t.me/asic_plus">@asic_plus</a>
+👨‍💼 Менеджер: <a href="https://t.me/snooby37">@snooby37</a>
+📢 Канал: <a href="https://t.me/asic_mining_store">@asic_mining_store</a>
 """,
             parse_mode="HTML",
             disable_web_page_preview=True,
@@ -1339,17 +1347,61 @@ class Client:
         await state.set_state(SellForm.device)
 
     async def sell_device_handler(self, message: types.Message, state: FSMContext):
-        await state.update_data(device=message.text)
+        # Проверка типа данных - только текстовые сообщения
+        if not hasattr(message, 'text') or not message.text:
+            await message.answer("❌ Пожалуйста, отправьте текстовое сообщение с моделью устройства.")
+            return
+        
+        # Проверка на пустое сообщение
+        device_text = message.text.strip()
+        if not device_text:
+            await message.answer("❌ Модель устройства не может быть пустой. Введите модель устройства:")
+            return
+        
+        # Проверка минимальной длины (должно быть хотя бы 2 символа)
+        if len(device_text) < 2:
+            await message.answer("❌ Модель устройства слишком короткая (минимум 2 символа). Введите модель устройства:")
+            return
+        
+        # Проверка длины (разумный лимит)
+        if len(device_text) > 200:
+            await message.answer("❌ Модель устройства слишком длинная (максимум 200 символов). Введите короче:")
+            return
+        
+        # Проверка на валидность: должна содержать хотя бы одну букву или цифру
+        if not any(c.isalnum() for c in device_text):
+            await message.answer("❌ Модель устройства должна содержать хотя бы одну букву или цифру. Введите корректную модель:")
+            return
+        
+        await state.update_data(device=device_text)
         await message.answer("💰 Введите цену продажи (в рублях):")
         await state.set_state(SellForm.price)
 
     async def sell_price_handler(self, message: types.Message, state: FSMContext):
+        # Проверка типа данных - только текстовые сообщения
+        if not hasattr(message, 'text') or not message.text:
+            await message.answer("❌ Пожалуйста, отправьте текстовое сообщение с ценой.")
+            return
+        
+        # Проверка на пустое сообщение
+        price_text = message.text.strip()
+        if not price_text:
+            await message.answer("❌ Цена не может быть пустой. Введите цену продажи (в рублях):")
+            return
+        
+        # Проверка, что строка состоит только из цифр (после удаления пробелов)
+        if not price_text.replace(" ", "").isdigit():
+            await message.answer("❌ Введите корректную цену (только цифры, без букв и символов):")
+            return
+        
+        # Проверка, что это число
         try:
-            price = int(message.text)
+            price = int(price_text)
             if price <= 0:
-                raise ValueError
+                await message.answer("❌ Цена должна быть больше нуля. Введите корректную цену:")
+                return
         except ValueError:
-            await message.answer("❌ Введите корректную цену (число больше нуля):")
+            await message.answer("❌ Введите корректную цену (целое число больше нуля):")
             return
 
         await state.update_data(price=price)
@@ -1359,20 +1411,104 @@ class Client:
         await state.set_state(SellForm.condition)
 
     async def sell_condition_handler(self, message: types.Message, state: FSMContext):
-        await state.update_data(condition=message.text)
+        # Проверка типа данных - только текстовые сообщения
+        if not hasattr(message, 'text') or not message.text:
+            await message.answer("❌ Пожалуйста, отправьте текстовое сообщение с описанием состояния.")
+            return
+        
+        # Проверка на пустое сообщение
+        condition_text = message.text.strip()
+        if not condition_text:
+            await message.answer("❌ Описание состояния не может быть пустым. Опишите состояние устройства:")
+            return
+        
+        # Проверка минимальной длины
+        if len(condition_text) < 3:
+            await message.answer("❌ Описание состояния слишком короткое (минимум 3 символа). Опишите состояние устройства:")
+            return
+        
+        # Проверка длины (разумный лимит)
+        if len(condition_text) > 500:
+            await message.answer("❌ Описание состояния слишком длинное (максимум 500 символов). Введите короче:")
+            return
+        
+        # Проверка на валидность: должна содержать хотя бы одну букву или цифру
+        if not any(c.isalnum() for c in condition_text):
+            await message.answer("❌ Описание состояния должно содержать хотя бы одну букву или цифру. Опишите состояние устройства:")
+            return
+        
+        await state.update_data(condition=condition_text)
         await message.answer("📋 Добавьте описание (комплектация, особенности и т.д.):")
         await state.set_state(SellForm.description)
 
     async def sell_description_handler(self, message: types.Message, state: FSMContext):
-        await state.update_data(description=message.text)
+        # Проверка типа данных - только текстовые сообщения
+        if not hasattr(message, 'text') or not message.text:
+            await message.answer("❌ Пожалуйста, отправьте текстовое сообщение с описанием.")
+            return
+        
+        # Проверка на пустое сообщение
+        description_text = message.text.strip()
+        if not description_text:
+            await message.answer("❌ Описание не может быть пустым. Добавьте описание:")
+            return
+        
+        # Проверка минимальной длины
+        if len(description_text) < 3:
+            await message.answer("❌ Описание слишком короткое (минимум 3 символа). Добавьте описание:")
+            return
+        
+        # Проверка длины (разумный лимит)
+        if len(description_text) > 1000:
+            await message.answer("❌ Описание слишком длинное (максимум 1000 символов). Введите короче:")
+            return
+        
+        # Проверка на валидность: должна содержать хотя бы одну букву или цифру
+        if not any(c.isalnum() for c in description_text):
+            await message.answer("❌ Описание должно содержать хотя бы одну букву или цифру. Добавьте описание:")
+            return
+        
+        await state.update_data(description=description_text)
         await message.answer(
             "📞 Укажите контакты для связи (телефон, Telegram и т.д.):"
         )
         await state.set_state(SellForm.contact)
 
     async def sell_contact_handler(self, message: types.Message, state: FSMContext):
-        await state.update_data(contact=message.text)
+        # Проверка типа данных - только текстовые сообщения
+        if not hasattr(message, 'text') or not message.text:
+            await message.answer("❌ Пожалуйста, отправьте текстовое сообщение с контактами.")
+            return
+        
+        # Проверка на пустое сообщение
+        contact_text = message.text.strip()
+        if not contact_text:
+            await message.answer("❌ Контакты не могут быть пустыми. Укажите контакты для связи:")
+            return
+        
+        # Проверка минимальной длины
+        if len(contact_text) < 3:
+            await message.answer("❌ Контакты слишком короткие (минимум 3 символа). Укажите контакты для связи:")
+            return
+        
+        # Проверка длины (разумный лимит)
+        if len(contact_text) > 200:
+            await message.answer("❌ Контакты слишком длинные (максимум 200 символов). Введите короче:")
+            return
+        
+        # Проверка на валидность: должна содержать хотя бы одну букву или цифру
+        if not any(c.isalnum() for c in contact_text):
+            await message.answer("❌ Контакты должны содержать хотя бы одну букву или цифру. Укажите контакты для связи:")
+            return
+        
+        await state.update_data(contact=contact_text)
         data = await state.get_data()
+        
+        # Дополнительная проверка всех данных перед отправкой
+        if not data.get("device") or not data.get("price") or not data.get("condition") or not data.get("description") or not data.get("contact"):
+            await message.answer("❌ Ошибка: не все данные заполнены. Пожалуйста, начните заново.")
+            await state.clear()
+            return
 
         def escape_html(text):
             if not text:
@@ -1385,12 +1521,40 @@ class Client:
                 .replace('"', "&quot;")
             )
 
+        # Финальная проверка валидности всех данных перед отправкой
+        device = data.get("device", "").strip()
+        price = data.get("price", 0)
+        condition = data.get("condition", "").strip()
+        description = data.get("description", "").strip()
+        contact = data.get("contact", "").strip()
+        
+        # Проверка, что все поля заполнены и валидны
+        validation_errors = []
+        if not device or len(device) < 2 or not any(c.isalnum() for c in device):
+            validation_errors.append("модель устройства")
+        if not price or price <= 0:
+            validation_errors.append("цена")
+        if not condition or len(condition) < 3 or not any(c.isalnum() for c in condition):
+            validation_errors.append("состояние устройства")
+        if not description or len(description) < 3 or not any(c.isalnum() for c in description):
+            validation_errors.append("описание")
+        if not contact or len(contact) < 3 or not any(c.isalnum() for c in contact):
+            validation_errors.append("контакты")
+        
+        if validation_errors:
+            await message.answer(
+                f"❌ Ошибка валидации: некорректно заполнены поля: {', '.join(validation_errors)}. "
+                f"Пожалуйста, начните заново."
+            )
+            await state.clear()
+            return
+        
         try:
-            escaped_device = escape_html(data.get("device", ""))
-            escaped_price = escape_html(str(data.get("price", "")))
-            escaped_condition = escape_html(data.get("condition", ""))
-            escaped_description = escape_html(data.get("description", ""))
-            escaped_contact = escape_html(data.get("contact", ""))
+            escaped_device = escape_html(device)
+            escaped_price = escape_html(str(price))
+            escaped_condition = escape_html(condition)
+            escaped_description = escape_html(description)
+            escaped_contact = escape_html(contact)
             escaped_username = escape_html(
                 message.from_user.username or message.from_user.first_name
             )
@@ -1406,17 +1570,35 @@ class Client:
                     f"🔧 <b>Состояние:</b> {escaped_condition}\n"
                     f"📋 <b>Описание:</b> {escaped_description}\n"
                     f"📞 <b>Контакты:</b> {escaped_contact}\n\n"
-                    f"С вами скоро свяжется менеджер @vadim_0350."
+                    f"С вами скоро свяжется менеджер @snooby37."
                 ),
                 parse_mode="HTML",
             )
         except Exception as e:
-            print(f"Ошибка при отправке заявки: {e}")
-            await message.answer("❌ Не удалось отправить заявку. Попробуйте позже.")
+            print(f"Ошибка при отправке заявки администратору (ID: {ADMIN_ID}): {e}")
+            await message.answer(
+                f"❌ Не удалось отправить заявку администратору. "
+                f"Пожалуйста, свяжитесь с менеджером напрямую: @snooby37"
+            )
             await state.clear()
             return
 
         await message.answer(
-            "✅ Спасибо! С вами скоро свяжется менеджер @vadim_0350.", parse_mode=None
+            "✅ Спасибо! С вами скоро свяжется менеджер @snooby37.", parse_mode=None
         )
         await state.clear()
+
+    async def sell_invalid_content_handler(self, message: types.Message, state: FSMContext):
+        """Обработчик для не-текстовых сообщений в форме продажи оборудования"""
+        current_state = await state.get_state()
+        
+        if current_state == SellForm.device.state:
+            await message.answer("❌ Пожалуйста, отправьте текстовое сообщение с моделью устройства.")
+        elif current_state == SellForm.price.state:
+            await message.answer("❌ Пожалуйста, отправьте текстовое сообщение с ценой.")
+        elif current_state == SellForm.condition.state:
+            await message.answer("❌ Пожалуйста, отправьте текстовое сообщение с описанием состояния.")
+        elif current_state == SellForm.description.state:
+            await message.answer("❌ Пожалуйста, отправьте текстовое сообщение с описанием.")
+        elif current_state == SellForm.contact.state:
+            await message.answer("❌ Пожалуйста, отправьте текстовое сообщение с контактами.")

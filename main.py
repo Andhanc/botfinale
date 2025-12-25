@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 import pytz
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
 from signature import Settings
 from utils.coin_service import CoinGeckoService
@@ -30,19 +30,18 @@ class BotRunner:
         self.setup_scheduler()
 
     def setup_scheduler(self):
-        moscow_tz = pytz.timezone("Europe/Moscow")
-        # Ежедневное обновление цен и отправка курсов в 10:00 по Москве
-        trigger = CronTrigger(hour=10, minute=0, timezone=moscow_tz)
+        # Обновление цен и отправка курсов каждые 10 минут
+        trigger = IntervalTrigger(minutes=10)
         self.scheduler.add_job(
             self.coin_service.update_coin_prices_and_notify,
             trigger,
-            id="price_update_daily",
+            id="price_update_interval",
         )
 
     async def run(self):
         await self.setup()
         self.scheduler.start()
-        print("Планировщик запущен. Цены и курсы будут отправляться каждый день в 17:06 по Москве")
+        print("Планировщик запущен. Цены и курсы будут обновляться каждые 10 минут")
         try:
             await self.bot_instance.dp.start_polling(self.bot_instance.bot)
         finally:

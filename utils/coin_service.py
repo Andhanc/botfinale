@@ -126,8 +126,9 @@ class CoinGeckoService:
             #                 f"Не удалось отправить уведомление пользователю {user.uid}: {e}"
             #             )
 
-            # Делаем пост с курсом валют и монет в канал Asic+ (https://t.me/asic_plus)
-            await self.bot.send_message(-1001546174824, message, parse_mode="Markdown")
+            # Отправка в канал временно отключена
+            # Делаем пост с курсом валют и монет в канал Asic Store (https://t.me/asic_mining_store)
+            # await self.bot.send_message(-1001546174824, message, parse_mode="Markdown")
 
         except Exception as e:
             logger.error(f"Ошибка при отправке уведомлений: {e}")

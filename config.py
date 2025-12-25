@@ -4,7 +4,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-ADMIN_ID = 6177558353
+# ID администратора для получения заявок на продажу оборудования
+# Можно переопределить через переменную окружения ADMIN_ID
+ADMIN_ID = int(os.getenv("ADMIN_ID", "1145377244"))
 
 
 def get_db_url():
