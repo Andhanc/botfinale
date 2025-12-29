@@ -10,6 +10,7 @@ from utils.coin_service import CoinGeckoService
 from utils.logger import setup_logger
 
 
+
 class BotRunner:
     def __init__(self):
         self.bot_instance = Settings()

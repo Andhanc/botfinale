@@ -1,9 +1,12 @@
 import os
 
+from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
+
+load_dotenv()
 
 from config import get_db_url
 from database.models import CreateDatabase

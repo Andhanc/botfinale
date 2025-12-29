@@ -15,7 +15,7 @@ from database.models import Algorithm, Manufacturer
 from keyboards.calculator_kb import CalculatorKB
 from keyboards.client_kb import ClientKB
 from signature import Settings
-from utils.ai_service import ask_ishushka
+from utils.ai_service import ask_ishushka, create_chat
 from utils.calculator import MiningCalculator
 from utils.coin_service import CoinGeckoService
 from utils.states import BetterPriceState, CalculatorState, FreeAiState, SellForm
@@ -657,10 +657,20 @@ class Client:
         return context
 
     async def ai_chat_handler(self, message: types.Message, state: FSMContext):
-
         context = await self.prepare_ai_context()
-
-        response = await ask_ishushka("d0tSpMyO0f", message.text, context)
+        
+        # Новый API не требует conversation_id, но оставляем для совместимости
+        user_id = str(message.from_user.id)
+        if user_id not in user_chats:
+            user_chats[user_id] = "not_needed"  # Новый API не требует conversation_id
+        
+        conversation_id = user_chats[user_id]
+        response = await ask_ishushka(conversation_id, message.text, context)
+        
+        # Проверяем, что ответ не пустой
+        if not response or not response.strip():
+            response = "К сожалению, не удалось получить ответ от AI-сервиса. Попробуйте переформулировать вопрос.\n\n💬 Наш менеджер: @snooby37\n📢 Наш канал: @asic_mining_store"
+        
         await message.answer(
             response, parse_mode=None, reply_markup=await ClientKB.back_ai()
         )
