@@ -1,21 +1,12 @@
 # Python
-venv/
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
 
-# Environment variables
-.env
-.env.local
-
-# Database
-*.db
-*.sqlite
-*.sqlite3
-# Исключение: mainercrypto.db добавлена в репозиторий
-!mainercrypto.db
+# Virtual environment (исключаем venv из репозитория, но можно включить если нужно)
+venv/
 
 # IDE
 .vscode/
@@ -36,5 +27,6 @@ Thumbs.db
 analyze_calculator.py
 change_token.py
 
-# Alembic
-versions/*.py
+# Включаем .env и БД в репозиторий (не игнорируем)
+# .env - будет включен
+# *.db - будут включены
