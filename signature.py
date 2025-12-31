@@ -21,9 +21,28 @@ from database.request import (
 
 class Settings:
     def __init__(self):
+        # Проверяем, загружен ли .env файл
+        env_path = os.path.join(os.path.dirname(__file__), '.env')
+        if not os.path.exists(env_path):
+            raise FileNotFoundError(
+                f"Файл .env не найден в {os.path.dirname(__file__)}. "
+                f"Создайте файл .env с переменной BOT_TOKEN=ваш_токен"
+            )
+        
         self.token = os.getenv("BOT_TOKEN")
         if not self.token:
-            raise ValueError("BOT_TOKEN not set in .env")
+            raise ValueError(
+                "BOT_TOKEN не установлен в .env файле. "
+                "Добавьте строку: BOT_TOKEN=ваш_токен_бота"
+            )
+        
+        # Проверяем, что токен не является placeholder
+        if self.token == "your_bot_token_here" or len(self.token) < 10:
+            raise ValueError(
+                "BOT_TOKEN в .env файле не настроен. "
+                "Замените 'your_bot_token_here' на реальный токен от @BotFather"
+            )
+        
         self.bot = Bot(
             token=self.token,
             default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN),
