@@ -1082,7 +1082,15 @@ class Client:
         usd_to_rub = await coin_service.get_usd_rub_rate()
 
         if data.get("method") == "asic":
-            model = data["model"]
+            # Загружаем модель заново из БД по model_id, так как объект ORM может быть неполным после сериализации
+            model_id = data.get("model_id")
+            if not model_id:
+                await call.message.edit_text("❌ Ошибка: данные о модели не найдены. Пожалуйста, начните расчет заново.")
+                return
+            model = await self.calculator_req.get_asic_model_by_id(model_id)
+            if not model:
+                await call.message.edit_text("❌ Модель не найдена в базе данных")
+                return
             model_line = await self.calculator_req.get_model_line_by_id(
                 model.model_line_id
             )
@@ -1298,7 +1306,15 @@ class Client:
         usd_to_rub = await coin_service.get_usd_rub_rate()
 
         if data.get("method") == "asic":
-            model = data["model"]
+            # Загружаем модель заново из БД по model_id, так как объект ORM может быть неполным после сериализации
+            model_id = data.get("model_id")
+            if not model_id:
+                await call.message.edit_text("❌ Ошибка: данные о модели не найдены. Пожалуйста, начните расчет заново.")
+                return
+            model = await self.calculator_req.get_asic_model_by_id(model_id)
+            if not model:
+                await call.message.edit_text("❌ Модель не найдена в базе данных")
+                return
             model_line = await self.calculator_req.get_model_line_by_id(
                 model.model_line_id
             )
