@@ -1,11 +1,10 @@
 # [file name]: client.py
-from asyncio.log import logger
 from pathlib import Path
 from typing import Any, Dict
 
 from aiogram import F, types
 from aiogram.enums import ContentType
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
 from aiogram.filters import Command, Filter
 from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -253,14 +252,28 @@ class Client:
             photo = "https://i.yapx.ru/aaABM.png"
         kb = await ClientKB.main_menu()
 
-        if isinstance(message, types.CallbackQuery):
-            await message_obj.delete()
+        async def _send_start():
             await self.bot.send_photo(
-                chat_id=user.id, photo=photo, caption=text, reply_markup=kb
+                chat_id=user.id,
+                photo=photo,
+                caption=text,
+                reply_markup=kb,
+                request_timeout=90,
             )
-        else:
-            await self.bot.send_photo(
-                chat_id=user.id, photo=photo, caption=text, reply_markup=kb
+
+        try:
+            if isinstance(message, types.CallbackQuery):
+                await message_obj.delete()
+            await _send_start()
+        except (TelegramNetworkError, OSError, Exception):
+            # При таймауте/сетевой ошибке отправляем только текст (работает и без прокси)
+            if isinstance(message, types.CallbackQuery):
+                try:
+                    await message_obj.delete()
+                except TelegramBadRequest:
+                    pass
+            await self.bot.send_message(
+                chat_id=user.id, text=text, reply_markup=kb
             )
 
     async def calc_income_handler(self, call: types.CallbackQuery, state: FSMContext):
@@ -548,6 +561,14 @@ class Client:
                     f"С вами скоро свяжется менеджер @snooby37."
                 ),
                 parse_mode="HTML",
+                request_timeout=90,
+            )
+        except (TelegramNetworkError, OSError) as e:
+            print(f"Сеть при отправке заявки админу: {e}")
+            await self.bot.send_message(
+                ADMIN_ID,
+                f"⚠ Заявка «Лучшая цена» (не удалось отправить фото):\n"
+                f"От: @{user.username or user.first_name}, ID: {user.id}\n\n{data['comment']}",
             )
         except Exception as e:
             print(e)

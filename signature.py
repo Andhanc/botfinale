@@ -2,6 +2,7 @@ import os
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 
@@ -16,13 +17,22 @@ from database.request import (
 )
 
 
+def _make_bot_session():
+    """Сессия с опциональным прокси и увеличенным таймаутом для стабильной работы на сервере."""
+    proxy = os.getenv("PROXY_URL")  # например: socks5://user:pass@host:port
+    # timeout в секундах (BaseSession), 120 для загрузки фото с сервера
+    return AiohttpSession(proxy=proxy or None, timeout=120.0)
+
+
 class Settings:
     def __init__(self):
         self.token = os.getenv("BOT_TOKEN")
         if not self.token:
             raise ValueError("BOT_TOKEN not set in .env")
+        session = _make_bot_session()
         self.bot = Bot(
             token=self.token,
+            session=session,
             default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN),
         )
         self.dp = Dispatcher(storage=MemoryStorage())
