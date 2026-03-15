@@ -1,4 +1,5 @@
 # [file name]: client.py
+import os
 from pathlib import Path
 from typing import Any, Dict
 
@@ -243,38 +244,19 @@ class Client:
             "Могу провести расчёт потенциальной доходности, помочь с выбором подходящего оборудования "
             "и дать подробные ответы на любые связанные с этим вопросы."
         )
-        # Используем локальный файл с логотипом из папки image
-        photo_path = Path(__file__).parent.parent / "image" / "logo.JPG"
-        if photo_path.exists():
-            photo = types.FSInputFile(photo_path)
-        else:
-            # Запасной вариант - используем URL (если локальный файл не найден)
-            photo = "https://i.yapx.ru/aaABM.png"
+        # URL логотипа — Telegram сам подгружает картинку, ответ быстрый и фото всегда отображается
+        welcome_photo_url = os.getenv("WELCOME_PHOTO_URL", "https://i.yapx.ru/aaABM.png")
         kb = await ClientKB.main_menu()
 
-        async def _send_start():
-            await self.bot.send_photo(
-                chat_id=user.id,
-                photo=photo,
-                caption=text,
-                reply_markup=kb,
-                request_timeout=90,
-            )
-
-        try:
-            if isinstance(message, types.CallbackQuery):
-                await message_obj.delete()
-            await _send_start()
-        except (TelegramNetworkError, OSError, Exception):
-            # При таймауте/сетевой ошибке отправляем только текст (работает и без прокси)
-            if isinstance(message, types.CallbackQuery):
-                try:
-                    await message_obj.delete()
-                except TelegramBadRequest:
-                    pass
-            await self.bot.send_message(
-                chat_id=user.id, text=text, reply_markup=kb
-            )
+        if isinstance(message, types.CallbackQuery):
+            await message_obj.delete()
+        await self.bot.send_photo(
+            chat_id=user.id,
+            photo=welcome_photo_url,
+            caption=text,
+            reply_markup=kb,
+            request_timeout=10,
+        )
 
     async def calc_income_handler(self, call: types.CallbackQuery, state: FSMContext):
         await state.clear()
@@ -561,7 +543,7 @@ class Client:
                     f"С вами скоро свяжется менеджер @snooby37."
                 ),
                 parse_mode="HTML",
-                request_timeout=90,
+                request_timeout=15,
             )
         except (TelegramNetworkError, OSError) as e:
             print(f"Сеть при отправке заявки админу: {e}")

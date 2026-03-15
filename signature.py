@@ -18,10 +18,9 @@ from database.request import (
 
 
 def _make_bot_session():
-    """Сессия с опциональным прокси и увеличенным таймаутом для стабильной работы на сервере."""
+    """Сессия с опциональным прокси. Короткий таймаут — быстрый ответ и быстрый fallback при сбоях."""
     proxy = os.getenv("PROXY_URL")  # например: socks5://user:pass@host:port
-    # timeout в секундах (BaseSession), 120 для загрузки фото с сервера
-    return AiohttpSession(proxy=proxy or None, timeout=120.0)
+    return AiohttpSession(proxy=proxy or None, timeout=15.0)
 
 
 class Settings:
