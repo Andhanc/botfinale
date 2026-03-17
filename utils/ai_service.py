@@ -1,4 +1,3 @@
-import json
 from typing import Any, Dict
 
 import aiohttp
@@ -7,11 +6,17 @@ API_KEY = "BYoJPkBN-tNrzeDNN-a2srEf4J-hl1JuY5P"
 BASE_URL = "https://api.ishushka.com"
 
 
-async def create_chat() -> str:
-    async with aiohttp.ClientSession() as session:
-        async with session.post(f"{BASE_URL}/chat/new/{API_KEY}") as resp:
-            data = await resp.json()
-            return data["conversation_id"]
+async def create_chat() -> str | None:
+    """Создаёт новый чат в API. Возвращает conversation_id или None при ошибке."""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(f"{BASE_URL}/chat/new/{API_KEY}/") as resp:
+                if resp.status != 200:
+                    return None
+                data = await resp.json()
+                return data.get("conversation_id")
+    except Exception:
+        return None
 
 
 async def ask_ishushka(
@@ -59,22 +64,42 @@ async def ask_ishushka(
         "ref": "",
     }
 
+    async def _ask_simple(p: dict) -> str:
+        """Запрос без истории чата (эндпоинт /request/)."""
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{BASE_URL}/request/{API_KEY}/",
+                    json=p,
+                    timeout=aiohttp.ClientTimeout(total=30),
+                ) as resp:
+                    if resp.status != 200:
+                        return "Ошибка подключения к сервису. Попробуйте позже."
+                    data = await resp.json()
+                    return data.get("message", "Не удалось получить ответ от сервиса.")
+        except Exception:
+            return "Ошибка подключения к сервису. Попробуйте позже."
+
     try:
-        # Отправка запроса к AI-сервису
+        # Отправка запроса к AI-сервису (URL с завершающим слэшем по документации API)
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                f"{BASE_URL}/chat/request/{API_KEY}/{conversation_id}",
+                f"{BASE_URL}/chat/request/{API_KEY}/{conversation_id}/",
                 json=payload,
                 timeout=aiohttp.ClientTimeout(total=30),
             ) as resp:
 
-                if resp.status != 200:
-                    print(resp.text)
-                    return "Ошибка подключения к сервису. Попробуйте позже."
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data.get("message", "Не удалось получить ответ от сервиса.")
 
-                data = await resp.json()
-                print(data)
-                return data.get("message", "Не удалось получить ответ от сервиса.")
+                # Чат удалён или не найден (402) / неверный путь (404) — пробуем без истории
+                if resp.status in (402, 404):
+                    return await _ask_simple(payload)
+
+                body = await resp.text()
+                print(f"ishushka chat/request error {resp.status}: {body}")
+                return "Ошибка подключения к сервису. Попробуйте позже."
 
     except aiohttp.ClientError:
         return "Ошибка сети. Проверьте подключение к интернету."

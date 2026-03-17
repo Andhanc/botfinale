@@ -1,10 +1,10 @@
 # [file name]: client.py
-import os
 from pathlib import Path
 from typing import Any, Dict
 
 from aiogram import F, types
 from aiogram.enums import ContentType
+from aiogram.types import FSInputFile
 from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
 from aiogram.filters import Command, Filter
 from aiogram.fsm.context import FSMContext
@@ -15,7 +15,7 @@ from database.models import Algorithm, Manufacturer
 from keyboards.calculator_kb import CalculatorKB
 from keyboards.client_kb import ClientKB
 from signature import Settings
-from utils.ai_service import ask_ishushka
+from utils.ai_service import ask_ishushka, create_chat
 from utils.calculator import MiningCalculator
 from utils.coin_service import CoinGeckoService
 from utils.states import BetterPriceState, CalculatorState, FreeAiState, SellForm
@@ -244,15 +244,16 @@ class Client:
             "Могу провести расчёт потенциальной доходности, помочь с выбором подходящего оборудования "
             "и дать подробные ответы на любые связанные с этим вопросы."
         )
-        # URL логотипа — Telegram сам подгружает картинку, ответ быстрый и фото всегда отображается
-        welcome_photo_url = os.getenv("WELCOME_PHOTO_URL", "https://i.yapx.ru/aaABM.png")
+        # Логотип из папки проекта (относительный путь — работает на любом сервере)
+        project_root = Path(__file__).resolve().parent.parent
+        welcome_photo = FSInputFile(project_root / "image" / "logo.JPG")
         kb = await ClientKB.main_menu()
 
         if isinstance(message, types.CallbackQuery):
             await message_obj.delete()
         await self.bot.send_photo(
             chat_id=user.id,
-            photo=welcome_photo_url,
+            photo=welcome_photo,
             caption=text,
             reply_markup=kb,
             request_timeout=10,
@@ -601,8 +602,13 @@ class Client:
 
     async def ai_consult_start(self, call: types.CallbackQuery, state: FSMContext):
         await call.message.delete()
+        user_id = call.from_user.id
+        # Создаём новый чат в API (старые conversation_id живут 48ч и дают 404)
+        conv_id = await create_chat()
+        if conv_id:
+            user_chats[user_id] = conv_id
         await self.bot.send_message(
-            call.from_user.id,
+            user_id,
             "💬 Задайте ваш вопрос по майнингу:",
             reply_markup=await ClientKB.back_ai(),
         )
@@ -659,10 +665,15 @@ class Client:
         return context
 
     async def ai_chat_handler(self, message: types.Message, state: FSMContext):
-
         context = await self.prepare_ai_context()
-
-        response = await ask_ishushka("d0tSpMyO0f", message.text, context)
+        user_id = message.from_user.id
+        # Используем чат пользователя или создаём новый; без id запрос уйдёт в fallback /request/
+        conv_id = user_chats.get(user_id)
+        if not conv_id:
+            conv_id = await create_chat()
+            if conv_id:
+                user_chats[user_id] = conv_id
+        response = await ask_ishushka(conv_id or "default", message.text, context)
         await message.answer(
             response, parse_mode=None, reply_markup=await ClientKB.back_ai()
         )
