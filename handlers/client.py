@@ -6,6 +6,7 @@ from typing import Any, Dict
 from aiogram import F, types
 from aiogram.enums import ContentType
 from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
+from aiogram.types import FSInputFile
 from aiogram.filters import Command, Filter
 from aiogram.fsm.context import FSMContext
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -244,21 +245,34 @@ class Client:
             "Могу провести расчёт потенциальной доходности, помочь с выбором подходящего оборудования "
             "и дать подробные ответы на любые связанные с этим вопросы."
         )
-        # URL логотипа — Telegram сам подгружает картинку, без загрузки с сервера (нет таймаута)
-        welcome_photo_url = os.getenv("WELCOME_PHOTO_URL", "https://i.yapx.ru/aaABM.png")
+        # Приветственное фото — локальный image/logo.JPG (Asic Store)
+        project_root = Path(__file__).resolve().parent.parent
+        logo_path = project_root / "image" / "logo.JPG"
+        if logo_path.exists():
+            photo = FSInputFile(logo_path)
+        else:
+            photo = os.getenv("WELCOME_PHOTO_URL") or None
         kb = await ClientKB.main_menu()
 
         if isinstance(message, types.CallbackQuery):
             await message_obj.delete()
-        try:
-            await self.bot.send_photo(
-                chat_id=user.id,
-                photo=welcome_photo_url,
-                caption=text,
-                reply_markup=kb,
-                request_timeout=10,
-            )
-        except (TelegramNetworkError, OSError):
+
+        if photo:
+            try:
+                await self.bot.send_photo(
+                    chat_id=user.id,
+                    photo=photo,
+                    caption=text,
+                    reply_markup=kb,
+                    request_timeout=30,
+                )
+            except (TelegramNetworkError, OSError, Exception) as e:
+                # Таймаут или сеть — приветствие текстом, бот не падает
+                print(f"Приветственное фото не отправлено ({type(e).__name__}), отправлен текст")
+                await self.bot.send_message(
+                    chat_id=user.id, text=text, reply_markup=kb
+                )
+        else:
             await self.bot.send_message(
                 chat_id=user.id, text=text, reply_markup=kb
             )

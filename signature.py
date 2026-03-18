@@ -20,7 +20,7 @@ from database.request import (
 def _make_bot_session():
     """Сессия с опциональным прокси. Короткий таймаут — быстрый ответ и быстрый fallback при сбоях."""
     proxy = os.getenv("PROXY_URL")  # например: socks5://user:pass@host:port
-    return AiohttpSession(proxy=proxy or None, timeout=15.0)
+    return AiohttpSession(proxy=proxy or None, timeout=35.0)
 
 
 class Settings:
