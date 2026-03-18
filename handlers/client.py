@@ -1,10 +1,10 @@
 # [file name]: client.py
+import os
 from pathlib import Path
 from typing import Any, Dict
 
 from aiogram import F, types
 from aiogram.enums import ContentType
-from aiogram.types import FSInputFile
 from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
 from aiogram.filters import Command, Filter
 from aiogram.fsm.context import FSMContext
@@ -244,20 +244,24 @@ class Client:
             "Могу провести расчёт потенциальной доходности, помочь с выбором подходящего оборудования "
             "и дать подробные ответы на любые связанные с этим вопросы."
         )
-        # Логотип из папки проекта (относительный путь — работает на любом сервере)
-        project_root = Path(__file__).resolve().parent.parent
-        welcome_photo = FSInputFile(project_root / "image" / "logo.JPG")
+        # URL логотипа — Telegram сам подгружает картинку, без загрузки с сервера (нет таймаута)
+        welcome_photo_url = os.getenv("WELCOME_PHOTO_URL", "https://i.yapx.ru/aaABM.png")
         kb = await ClientKB.main_menu()
 
         if isinstance(message, types.CallbackQuery):
             await message_obj.delete()
-        await self.bot.send_photo(
-            chat_id=user.id,
-            photo=welcome_photo,
-            caption=text,
-            reply_markup=kb,
-            request_timeout=10,
-        )
+        try:
+            await self.bot.send_photo(
+                chat_id=user.id,
+                photo=welcome_photo_url,
+                caption=text,
+                reply_markup=kb,
+                request_timeout=10,
+            )
+        except (TelegramNetworkError, OSError):
+            await self.bot.send_message(
+                chat_id=user.id, text=text, reply_markup=kb
+            )
 
     async def calc_income_handler(self, call: types.CallbackQuery, state: FSMContext):
         await state.clear()
